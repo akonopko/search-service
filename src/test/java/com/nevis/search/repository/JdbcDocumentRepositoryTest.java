@@ -28,7 +28,7 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
     private JdbcClient jdbcClient;
 
     @Test
-    @DisplayName("Should successfully save and then find a document by ID")
+    @DisplayName("Happy path: Should successfully save and then find a document by ID")
     void shouldSaveAndFindDocument() {
         Client owner = clientRepository.save(new Client(
             null,
@@ -72,19 +72,6 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
     void shouldReturnEmptyWhenNotFound() {
         var found = documentRepository.findById(UUID.randomUUID());
         assertThat(found).isEmpty();
-    }
-
-    @Test
-    @DisplayName("Happy Path: Save document for client")
-    void shouldSaveDocument() {
-        Client owner = clientRepository.save(new Client(null, "Ivan", "Ivanov", "ivan@test.com", null, List.of(), null, null));
-        Document doc = new Document(null, owner.id(), "Doc Title", "Some content", "Summary", DocumentStatus.PENDING, null, null);
-
-        Document saved = documentRepository.save(doc);
-
-        assertThat(saved.id()).isNotNull();
-        assertThat(saved.clientId()).isEqualTo(owner.id());
-        assertThat(saved.createdAt()).isNotNull();
     }
 
     @Test
