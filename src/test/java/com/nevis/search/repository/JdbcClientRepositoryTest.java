@@ -87,6 +87,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 			saveClient("Aleksandr", "Konopko", "dev@example.com", "Java Developer");
 			saveClient("Oleksiy", "Konov", "oleks@test.com", "Python Coder");
 			saveClient("Dmitry", "Ivanov", "dima@test.ru", "Frontend");
+			saveClient("Ivan", "Petrov", "ivan@test.ru", null);
 		}
 
 		@Test
@@ -215,6 +216,15 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 
 			int totalFound = response.matches().size() + response.suggestions().size();
 			assertThat(totalFound).isLessThanOrEqualTo(searchProperties.limit());
+		}
+
+		@Test
+		@DisplayName("14. Null description: does not become part of index")
+		void nullDescription() {
+			var response = repository.search("null");
+
+			assertThat(response.matches().isEmpty());
+			assertThat(response.suggestions().isEmpty());
 		}
 
 		private void saveClient(String firstName, String lastName, String email, String description) {
