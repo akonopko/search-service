@@ -3,6 +3,7 @@ package com.nevis.search.repository;
 import com.nevis.search.model.Client;
 import com.nevis.search.model.Document;
 import com.nevis.search.model.DocumentStatus;
+import dev.langchain4j.data.segment.TextSegment;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +15,8 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
@@ -108,4 +111,51 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
 
         assertThat(saved.status()).isEqualTo(DocumentStatus.PENDING);
     }
+
+
+    @Test
+    void shouldInsertChunksInBatch() {
+
+        Client owner = clientRepository.save(new Client(null, "Time", "Test", "time@test2.com", null, List.of(), null, null));
+        Document doc = documentRepository.save(new Document(null, owner.id(), "Initial", "Content", null, DocumentStatus.PENDING, null, null));
+
+        List<TextSegment> segments = List.of(
+            TextSegment.from("Chunk content one"),
+            TextSegment.from("Chunk content two"),
+            TextSegment.from("Chunk content three")
+        );
+
+        documentRepository.saveChunks(doc.id(), segments);
+
+        List<String> contents = jdbcClient.sql("SELECT content FROM document_chunks WHERE document_id = ?")
+            .params(doc.id())
+            .query(String.class)
+            .list();
+
+        assertThat(contents)
+            .hasSize(3)
+            .containsExactlyInAnyOrder(
+                "Chunk content one",
+                "Chunk content two",
+                "Chunk content three"
+            );
+    }
+
+    @Test
+    void shouldHandleEmptySegmentsList() {
+        UUID docId = UUID.randomUUID();
+
+        assertThatCode(() -> documentRepository.saveChunks(docId, List.of()))
+            .doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldThrowExceptionWhenDocumentIdDoesNotExist() {
+        UUID nonExistentId = UUID.randomUUID();
+        List<TextSegment> segments = List.of(TextSegment.from("Orphaned chunk"));
+
+        assertThatThrownBy(() -> documentRepository.saveChunks(nonExistentId, segments))
+            .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
 }

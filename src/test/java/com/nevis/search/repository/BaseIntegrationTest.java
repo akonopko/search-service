@@ -6,6 +6,11 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+@SpringBootTest(properties = {
+    "app.search.threshold=0.4",
+    "app.search.limit=20",
+    "app.gemini.api-key=fake-key-value-for-testing"
+})
 @Testcontainers
 public abstract class BaseIntegrationTest {
 
