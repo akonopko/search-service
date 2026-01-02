@@ -27,6 +27,9 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 	@Autowired
 	private JdbcClient jdbcClient;
 
+	@Autowired
+	private SearchProperties searchProperties;
+
 	@Test
 	@DisplayName("Happy Path: Save and find client")
 	void shouldSaveAndFindClient() {
@@ -199,6 +202,19 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 			assertThat(response.matches())
 				.extracting(Client::description)
 				.contains("Frontend");
+		}
+
+		@Test
+		@DisplayName("13. Limit: Should respect the maximum results limit")
+		void shouldRespectLimit() {
+			for (int i = 0; i < searchProperties.limit() * 2; i++) {
+				saveClient("ExtraName" + i, "ExtraLast", "extra" + i + "@test.com", "Developer");
+			}
+
+			var response = repository.search("Developer");
+
+			int totalFound = response.matches().size() + response.suggestions().size();
+			assertThat(totalFound).isLessThanOrEqualTo(searchProperties.limit());
 		}
 
 		private void saveClient(String firstName, String lastName, String email, String description) {
