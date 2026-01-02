@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -30,6 +31,7 @@ public class JdbcDocumentRepository implements DocumentRepository {
     );
 
     @Override
+    @Transactional
     public Document save(Document document) {
         return jdbcClient.sql("""
                 INSERT INTO documents (client_id, title, content, summary, status)

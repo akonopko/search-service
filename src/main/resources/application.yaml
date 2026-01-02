@@ -15,3 +15,8 @@ spring:
     locations: classpath:db/migration
     check-location: true
     baseline-on-migrate: true
+
+  app:
+    search:
+      threshold: 0.4
+      limit: 20

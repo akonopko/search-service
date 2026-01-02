@@ -18,7 +18,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JdbcClientRepository implements ClientRepository {
 
+    private record ClientWithScore(Client client, double score, boolean isExact) {}
+
     private final JdbcClient jdbcClient;
+
+    private final SearchProperties searchProperties;
 
     private final RowMapper<Client> clientRowMapper = (rs, rowNum) -> new Client(
         rs.getObject("id", UUID.class),
@@ -60,7 +64,46 @@ public class JdbcClientRepository implements ClientRepository {
     @Override
     @Transactional(readOnly = true)
     public SearchResponse search(String query) {
-        return null;
+        if (query == null || query.isBlank()) {
+            return new SearchResponse(List.of(), List.of());
+        }
+
+        jdbcClient.sql(String.format(
+            "SET LOCAL pg_trgm.strict_word_similarity_threshold = %.2f",
+            searchProperties.threshold()
+        )).update();
+
+        String cleanQuery = query.trim().toLowerCase();
+
+        String sql = """
+            SELECT *, 
+                   strict_word_similarity(:query, t.full_text) as score,
+                   ((t.full_text ILIKE :pattern) OR (strict_word_similarity(:query, t.full_text) >= 1.0)) as is_exact
+            FROM (
+                SELECT *, 
+                       LOWER(concat_ws(' ', first_name, last_name, email, description)) as full_text
+                FROM clients
+            ) t
+            WHERE t.full_text ILIKE :pattern 
+               OR :query <<% t.full_text
+            ORDER BY is_exact DESC, score DESC, id ASC
+            LIMIT :limit
+            """;
+
+        var results = jdbcClient.sql(sql)
+            .param("query", cleanQuery)
+            .param("pattern", "%" + cleanQuery + "%")
+            .param("limit", searchProperties.limit())
+            .query((rs, rowNum) -> new ClientWithScore(
+                clientRowMapper.mapRow(rs, rowNum),
+                rs.getDouble("score"),
+                rs.getBoolean("is_exact")
+            )).list();
+
+        return new SearchResponse(
+            results.stream().filter(ClientWithScore::isExact).map(ClientWithScore::client).toList(),
+            results.stream().filter(r -> !r.isExact()).map(ClientWithScore::client).toList()
+        );
     }
 
 }

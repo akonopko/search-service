@@ -15,6 +15,10 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@SpringBootTest(properties = {
+	"app.search.threshold=0.4",
+	"app.search.limit=20"
+})
 class JdbcClientRepositoryTest extends BaseIntegrationTest {
 
 	@Autowired
