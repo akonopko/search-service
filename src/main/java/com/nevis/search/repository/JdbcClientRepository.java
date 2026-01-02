@@ -1,10 +1,12 @@
 package com.nevis.search.repository;
 
 import com.nevis.search.model.Client;
+import com.nevis.search.model.SearchResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.Arrays;
@@ -31,6 +33,7 @@ public class JdbcClientRepository implements ClientRepository {
     );
 
     @Override
+    @Transactional
     public Client save(Client client) {
         return jdbcClient.sql("""
                 INSERT INTO clients (first_name, last_name, email, description, social_links)
@@ -53,4 +56,11 @@ public class JdbcClientRepository implements ClientRepository {
             .query(clientRowMapper)
             .optional();
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public SearchResponse search(String query) {
+        return null;
+    }
+
 }
