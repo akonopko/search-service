@@ -1,6 +1,6 @@
 package com.nevis.search.model;
 
-public enum DocumentStatus {
+public enum DocumentTaskStatus {
     PENDING,
     PROCESSING,
     READY,

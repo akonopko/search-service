@@ -9,7 +9,7 @@ public record Document(
 	String title,
 	String content,
 	String summary,
-	DocumentStatus status,
+	DocumentTaskStatus status,
 	OffsetDateTime createdAt,
 	OffsetDateTime updatedAt
 ) {}

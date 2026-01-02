@@ -1,9 +1,8 @@
 package com.nevis.search.repository;
 
 import com.nevis.search.model.Document;
-import com.nevis.search.model.DocumentStatus;
-import dev.langchain4j.data.document.DocumentSplitter;
-import dev.langchain4j.data.document.splitter.DocumentSplitters;
+import com.nevis.search.model.DocumentChunk;
+import com.nevis.search.model.DocumentTaskStatus;
 import dev.langchain4j.data.segment.TextSegment;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
@@ -11,10 +10,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -34,7 +31,7 @@ public class JdbcDocumentRepository implements DocumentRepository {
         rs.getString("title"),
         rs.getString("content"),
         rs.getString("summary"),
-        DocumentStatus.valueOf(rs.getString("status")),
+        DocumentTaskStatus.valueOf(rs.getString("status")),
         rs.getObject("created_at", OffsetDateTime.class),
         rs.getObject("updated_at", OffsetDateTime.class)
     );
@@ -50,7 +47,7 @@ public class JdbcDocumentRepository implements DocumentRepository {
             .param("title", document.title())
             .param("content", document.content())
             .param("summary", document.summary())
-            .param("status", document.status() != null ? document.status().name() : DocumentStatus.PENDING.name())
+            .param("status", document.status() != null ? document.status().name() : DocumentTaskStatus.PENDING.name())
             .query(documentRowMapper)
             .single();
     }

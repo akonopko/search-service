@@ -1,7 +1,7 @@
 package com.nevis.search.service;
 
 import com.nevis.search.model.Document;
-import com.nevis.search.model.DocumentStatus;
+import com.nevis.search.model.DocumentTaskStatus;
 import com.nevis.search.repository.DocumentRepository;
 import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.document.splitter.DocumentSplitters;
@@ -22,7 +22,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Transactional
     public Document ingestDocument(String title, String content, UUID clientId) {
-        Document doc = new Document(null, clientId, title, content, null, DocumentStatus.PENDING, null, null);
+        Document doc = new Document(null, clientId, title, content, null, DocumentTaskStatus.PENDING, null, null);
 
         Document savedDoc = repository.save(doc);
 

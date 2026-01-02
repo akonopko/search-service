@@ -2,7 +2,7 @@ package com.nevis.search.repository;
 
 import com.nevis.search.model.Client;
 import com.nevis.search.model.Document;
-import com.nevis.search.model.DocumentStatus;
+import com.nevis.search.model.DocumentTaskStatus;
 import dev.langchain4j.data.segment.TextSegment;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,7 +50,7 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
             "Title",
             "Content",
             "Short summary of TDD",
-            DocumentStatus.PENDING,
+            DocumentTaskStatus.PENDING,
             null,
             null
         );
@@ -60,7 +60,7 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
         assertThat(savedDoc.id()).isNotNull();
         assertThat(savedDoc.title()).isEqualTo("Title");
         assertThat(savedDoc.clientId()).isEqualTo(owner.id());
-        assertThat(savedDoc.status()).isEqualTo(DocumentStatus.PENDING);
+        assertThat(savedDoc.status()).isEqualTo(DocumentTaskStatus.PENDING);
         assertThat(savedDoc.createdAt()).isNotNull();
 
         var foundDocOptional = documentRepository.findById(savedDoc.id());
@@ -80,7 +80,7 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
     @Test
     @DisplayName("Constraint: Fail when client_id does not exist (FK)")
     void shouldFailWithNonExistentClientId() {
-        Document orphan = new Document(null, UUID.randomUUID(), "Title", "Content", null, DocumentStatus.PENDING, null, null);
+        Document orphan = new Document(null, UUID.randomUUID(), "Title", "Content", null, DocumentTaskStatus.PENDING, null, null);
         assertThrows(DataIntegrityViolationException.class, () -> documentRepository.save(orphan));
     }
 
@@ -88,7 +88,7 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
     @DisplayName("Trigger: updated_at should change on update")
     void shouldUpdateTimestampOnRowChange() throws InterruptedException {
         Client owner = clientRepository.save(new Client(null, "Time", "Test", "time@test.com", null, List.of(), null, null));
-        Document doc = documentRepository.save(new Document(null, owner.id(), "Initial", "Content", null, DocumentStatus.PENDING, null, null));
+        Document doc = documentRepository.save(new Document(null, owner.id(), "Initial", "Content", null, DocumentTaskStatus.PENDING, null, null));
         OffsetDateTime created = doc.updatedAt();
 
         Thread.sleep(100);
@@ -106,10 +106,10 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
             .param(owner.id()).param("Title").param("Content")
             .query((rs, rowNum) -> new Document(
                 rs.getObject("id", UUID.class), owner.id(), "Title", "Content", null,
-                DocumentStatus.valueOf(rs.getString("status")), null, null))
+                DocumentTaskStatus.valueOf(rs.getString("status")), null, null))
             .single();
 
-        assertThat(saved.status()).isEqualTo(DocumentStatus.PENDING);
+        assertThat(saved.status()).isEqualTo(DocumentTaskStatus.PENDING);
     }
 
 
@@ -117,7 +117,7 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
     void shouldInsertChunksInBatch() {
 
         Client owner = clientRepository.save(new Client(null, "Time", "Test", "time@test2.com", null, List.of(), null, null));
-        Document doc = documentRepository.save(new Document(null, owner.id(), "Initial", "Content", null, DocumentStatus.PENDING, null, null));
+        Document doc = documentRepository.save(new Document(null, owner.id(), "Initial", "Content", null, DocumentTaskStatus.PENDING, null, null));
 
         List<TextSegment> segments = List.of(
             TextSegment.from("Chunk content one"),

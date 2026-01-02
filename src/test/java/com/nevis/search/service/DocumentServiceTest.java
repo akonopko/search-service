@@ -1,7 +1,8 @@
 package com.nevis.search.service;
 
+import com.nevis.search.event.DocumentIngestedEvent;
 import com.nevis.search.model.Document;
-import com.nevis.search.model.DocumentStatus;
+import com.nevis.search.model.DocumentTaskStatus;
 import com.nevis.search.repository.DocumentRepository;
 import dev.langchain4j.data.segment.TextSegment;
 import org.junit.jupiter.api.DisplayName;
@@ -34,7 +35,7 @@ class DocumentServiceTest {
         UUID clientId = UUID.randomUUID();
         UUID docId = UUID.randomUUID();
 
-        Document mockDoc = new Document(docId, clientId, "Test", content, null, DocumentStatus.PENDING, null, null);
+        Document mockDoc = new Document(docId, clientId, "Test", content, null, DocumentTaskStatus.PENDING, null, null);
 
         when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
@@ -64,7 +65,7 @@ class DocumentServiceTest {
         UUID clientId = UUID.randomUUID();
         UUID docId = UUID.randomUUID();
 
-        Document mockDoc = new Document(docId, clientId, "Empty", content, null, DocumentStatus.PENDING, null, null);
+        Document mockDoc = new Document(docId, clientId, "Empty", content, null, DocumentTaskStatus.PENDING, null, null);
         when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
         Document result = documentService.ingestDocument("Empty", content, clientId);
@@ -80,7 +81,7 @@ class DocumentServiceTest {
         UUID clientId = UUID.randomUUID();
         UUID docId = UUID.randomUUID();
 
-        Document mockDoc = new Document(docId, clientId, "Short", content, null, DocumentStatus.PENDING, null, null);
+        Document mockDoc = new Document(docId, clientId, "Short", content, null, DocumentTaskStatus.PENDING, null, null);
         when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
         documentService.ingestDocument("Short", content, clientId);
@@ -100,7 +101,7 @@ class DocumentServiceTest {
         UUID clientId = UUID.randomUUID();
         UUID docId = UUID.randomUUID();
 
-        Document mockDoc = new Document(docId, clientId, "Exact", content, null, DocumentStatus.PENDING, null, null);
+        Document mockDoc = new Document(docId, clientId, "Exact", content, null, DocumentTaskStatus.PENDING, null, null);
         when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
         documentService.ingestDocument("Exact", content, clientId);
@@ -118,7 +119,7 @@ class DocumentServiceTest {
         UUID clientId = UUID.randomUUID();
         UUID docId = UUID.randomUUID();
 
-        Document mockDoc = new Document(docId, clientId, "Whitespace", content, null, DocumentStatus.PENDING, null, null);
+        Document mockDoc = new Document(docId, clientId, "Whitespace", content, null, DocumentTaskStatus.PENDING, null, null);
         when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
         documentService.ingestDocument("Whitespace", content, clientId);
@@ -133,7 +134,7 @@ class DocumentServiceTest {
         UUID clientId = UUID.randomUUID();
         UUID docId = UUID.randomUUID();
 
-        Document mockDoc = new Document(docId, clientId, "LargeWord", content, null, DocumentStatus.PENDING, null, null);
+        Document mockDoc = new Document(docId, clientId, "LargeWord", content, null, DocumentTaskStatus.PENDING, null, null);
         when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
         documentService.ingestDocument("LargeWord", content, clientId);
@@ -143,4 +144,5 @@ class DocumentServiceTest {
 
         assertThat(captor.getValue()).hasSizeGreaterThan(1);
     }
+
 }
