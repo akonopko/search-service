@@ -24,13 +24,15 @@ CREATE INDEX idx_clients_description_trgm ON clients USING GIN (
 
 ALTER TABLE clients ADD CONSTRAINT email_must_be_lower CHECK (email = LOWER(email));
 
+CREATE TYPE task_status AS ENUM ('PENDING', 'PROCESSING', 'READY', 'FAILED');
+
 CREATE TABLE documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     summary TEXT,
-    status VARCHAR DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PROCESSING', 'READY', 'FAILED')),
+    status task_status DEFAULT 'PENDING',
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );

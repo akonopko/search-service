@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
 
     chunk_summary   TEXT,
 
-    status VARCHAR DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PROCESSING', 'READY', 'FAILED')),
+    status task_status DEFAULT 'PENDING',
     error_message   TEXT,
     attempts        INTEGER DEFAULT 0,
 
