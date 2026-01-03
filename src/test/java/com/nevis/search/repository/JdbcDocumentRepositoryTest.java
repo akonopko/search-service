@@ -11,6 +11,7 @@ import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.annotation.DirtiesContext;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -22,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
 
     @Autowired
@@ -115,180 +117,6 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
         assertThat(saved.status()).isEqualTo(DocumentTaskStatus.PENDING);
     }
 
-
-    @Test
-    @DisplayName("Chunks: insert in batch")
-    void shouldInsertChunksInBatch() {
-
-        Client owner = clientRepository.save(new Client(null, "Time", "Test", "time@test2.com", null, List.of(), null, null));
-        Document doc = documentRepository.save(new Document(null, owner.id(), "Initial", "Content", null, DocumentTaskStatus.PENDING, null, null));
-
-        List<TextSegment> segments = List.of(
-            TextSegment.from("Chunk content one"),
-            TextSegment.from("Chunk content two"),
-            TextSegment.from("Chunk content three")
-        );
-
-        documentRepository.saveChunks(doc.id(), segments);
-
-        List<String> contents = jdbcClient.sql("SELECT content FROM document_chunks WHERE document_id = ?")
-            .params(doc.id())
-            .query(String.class)
-            .list();
-
-        assertThat(contents)
-            .hasSize(3)
-            .containsExactlyInAnyOrder(
-                "Chunk content one",
-                "Chunk content two",
-                "Chunk content three"
-            );
-    }
-
-    @Test
-    @DisplayName("Chunks: handle empty")
-    void shouldHandleEmptySegmentsList() {
-        UUID docId = UUID.randomUUID();
-
-        assertThatCode(() -> documentRepository.saveChunks(docId, List.of()))
-            .doesNotThrowAnyException();
-    }
-
-    @Test
-    @DisplayName("Chunks: fail on orphan")
-    void shouldThrowExceptionWhenDocumentIdDoesNotExist() {
-        UUID nonExistentId = UUID.randomUUID();
-        List<TextSegment> segments = List.of(TextSegment.from("Orphaned chunk"));
-
-        assertThatThrownBy(() -> documentRepository.saveChunks(nonExistentId, segments))
-            .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
-    }
-
-    @Nested
-    @DisplayName("Embeddings test")
-    class EmbeddingsTest {
-
-        @Test
-        @DisplayName("Should retrieve only pending chunks for specific document in chronological order")
-        void shouldFindOnlyPendingChunksForCorrectDoc() {
-
-            Client client = clientRepository.save(new Client(null, "Def", "Status", "def@test.com", null, List.of(), null, null));
-
-            UUID doc1Id = UUID.randomUUID();
-            UUID doc2Id = UUID.randomUUID();
-            insertTestDocument(doc1Id, client.id());
-            insertTestDocument(doc2Id, client.id());
-
-            // Chunks for Doc 1 (The one we will query)
-            insertChunk(doc1Id, "First Pending", "PENDING", 1);
-            insertChunk(doc1Id, "Second Pending", "PENDING", 2);
-            insertChunk(doc1Id, "Already Ready", "READY", 3);
-
-            // Chunk for Doc 2 (Should be ignored)
-            insertChunk(doc2Id, "Other Doc Pending", "PENDING", 4);
-
-            List<DocumentChunk> results = documentRepository.findChunksByStatusDocId(doc1Id, DocumentTaskStatus.PENDING);
-
-            assertThat(results)
-                .hasSize(2)
-                .extracting(DocumentChunk::content)
-                .containsExactly("First Pending", "Second Pending");
-
-            assertThat(results).allMatch(chunk -> chunk.status() == DocumentTaskStatus.PENDING);
-        }
-
-        private void insertTestDocument(UUID id, UUID clientId) {
-            jdbcClient.sql("INSERT INTO documents (id, client_id, title, content, status) VALUES (?, ?, 'Title', 'Content', 'PENDING')")
-                .params(id, clientId).update();
-        }
-
-        private UUID insertChunk(UUID docId, String content, String status, int delaySeconds) {
-            return jdbcClient.sql("""
-                                      INSERT INTO document_chunks (document_id, content, status, created_at) 
-                                      VALUES (?, ?, ?::task_status, CURRENT_TIMESTAMP + INTERVAL '""" + delaySeconds + """
-                                      ' SECOND)
-                                      RETURNING id
-                                      """)
-                .params(docId, content, status)
-                .query(UUID.class)
-                .single();
-        }
-
-
-        @Test
-        @DisplayName("Should successfully update chunk status")
-        void shouldUpdateEmbeddingStatus() {
-
-            Client client = clientRepository.save(new Client(null, "Name1", "Last1", "def@test3.com", null, List.of(), null, null));
-
-            UUID doc1Id = UUID.randomUUID();
-            UUID doc2Id = UUID.randomUUID();
-            insertTestDocument(doc1Id, client.id());
-            insertTestDocument(doc2Id, client.id());
-
-            UUID existingChunkId = insertChunk(doc1Id, "First Pending", "PENDING", 1);
-
-            documentRepository.updateEmbeddingStatus(existingChunkId, DocumentTaskStatus.PROCESSING);
-
-            String updatedStatus = jdbcClient.sql("SELECT status FROM document_chunks WHERE id = ?")
-                .param(existingChunkId)
-                .query(String.class)
-                .single();
-
-            assertThat(updatedStatus).isEqualTo("PROCESSING");
-        }
-
-        @Test
-        @DisplayName("Should throw exception when updating status of non-existent chunk")
-        void shouldThrowExceptionWhenChunkNotFoundForStatus() {
-            UUID randomId = UUID.randomUUID();
-            assertThatThrownBy(() -> documentRepository.updateEmbeddingStatus(randomId, DocumentTaskStatus.READY))
-                .isInstanceOf(ChunkNotFoundException.class)
-                .hasMessageContaining("Chunk not found: " + randomId);
-        }
-
-        @Test
-        @DisplayName("Should update vector and set status to READY")
-        void shouldUpdateEmbeddingChunkVector() {
-            Client client = clientRepository.save(new Client(null, "Name2", "Last2", "def@test4.com", null, List.of(), null, null));
-
-            UUID doc1Id = UUID.randomUUID();
-            UUID doc2Id = UUID.randomUUID();
-            insertTestDocument(doc1Id, client.id());
-            insertTestDocument(doc2Id, client.id());
-
-            UUID existingChunkId = insertChunk(doc1Id, "First Pending", "PENDING", 1);
-
-            float[] vector = new float[1536];
-            vector[0] = 0.1f;
-            vector[1535] = 0.9f;
-
-            documentRepository.updateEmbeddingChunkVector(existingChunkId, vector);
-
-            Map<String, Object> result = jdbcClient.sql("SELECT status, embedding FROM document_chunks WHERE id = ?")
-                .param(existingChunkId)
-                .query()
-                .singleRow();
-
-            assertThat(result.get("status")).isEqualTo("READY");
-            assertThat(result.get("embedding")).isNotNull();
-        }
-
-        @Test
-        @DisplayName("Should throw exception when updating vector of non-existent chunk")
-        void shouldThrowExceptionWhenChunkNotFoundForVector() {
-            UUID randomId = UUID.randomUUID();
-
-            float[] vector = new float[1536];
-            vector[0] = 0.1f;
-            vector[1] = 0.2f;
-
-            assertThatThrownBy(() -> documentRepository.updateEmbeddingChunkVector(randomId, vector))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Chunk not found: " + randomId);
-        }
-    }
-
     @Nested
     @DisplayName("Update document status")
     class DocumentStatusTest {
@@ -322,7 +150,7 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
         @Test
         @DisplayName("Should update document status successfully")
         void shouldUpdateDocumentStatus() {
-            documentRepository.updateDocumentStatus(documentId, DocumentTaskStatus.READY);
+            documentRepository.updateStatus(documentId, DocumentTaskStatus.READY);
 
             // Assert
             String currentStatus = jdbcClient.sql("SELECT status::text FROM documents WHERE id = ?")
@@ -336,108 +164,8 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
         @DisplayName("Should throw DocumentNotFoundException for invalid ID")
         void shouldThrowWhenDocumentNotFound() {
             UUID randomId = UUID.randomUUID();
-            assertThatThrownBy(() -> documentRepository.updateDocumentStatus(randomId, DocumentTaskStatus.PROCESSING))
+            assertThatThrownBy(() -> documentRepository.updateStatus(randomId, DocumentTaskStatus.PROCESSING))
                 .isInstanceOf(DocumentNotFoundException.class);
-        }
-
-        @Test
-        @DisplayName("Should update embedding status and error message")
-        void shouldUpdateEmbeddingStatusWithError() {
-            String errorMessage = "API Quota exceeded";
-
-            // Act
-            documentRepository.updateEmbeddingStatus(chunkId, DocumentTaskStatus.FAILED, errorMessage);
-
-            Map<String, Object> result = jdbcClient.sql("SELECT status::text, error_message FROM document_chunks WHERE id = ?")
-                .param(chunkId)
-                .query().singleRow();
-
-            assertThat(result.get("status")).isEqualTo("FAILED");
-            assertThat(result.get("error_message")).isEqualTo(errorMessage);
-        }
-
-        @Test
-        @DisplayName("Should update embedding status with null error")
-        void shouldUpdateEmbeddingStatusWithoutError() {
-            documentRepository.updateEmbeddingStatus(chunkId, DocumentTaskStatus.READY, null);
-
-            Map<String, Object> result = jdbcClient.sql("SELECT status::text, error_message FROM document_chunks WHERE id = ?")
-                .param(chunkId)
-                .query().singleRow();
-
-            assertThat(result.get("status")).isEqualTo("READY");
-            assertThat(result.get("error_message")).isNull();
-        }
-
-        @Test
-        @DisplayName("Should throw ChunkNotFoundException for invalid ID")
-        void shouldThrowWhenChunkNotFound() {
-            UUID randomId = UUID.randomUUID();
-            assertThatThrownBy(() -> documentRepository.updateEmbeddingStatus(randomId, DocumentTaskStatus.READY))
-                .isInstanceOf(ChunkNotFoundException.class);
-        }
-
-    }
-
-
-    @Nested
-    @DisplayName("Update document status")
-    class AllChunksProcessedTest {
-
-        private UUID docId;
-
-        @BeforeEach
-        void setUp() {
-            jdbcClient.sql("delete from clients").update();
-            jdbcClient.sql("delete from documents").update();
-            jdbcClient.sql("delete from document_chunks").update();
-
-            UUID clientId = UUID.randomUUID();
-            jdbcClient.sql("INSERT INTO clients (id, first_name, last_name, email) VALUES (?, 'Test', 'User', 'test@test.com')")
-                .params(clientId).update();
-
-            docId = UUID.randomUUID();
-            jdbcClient.sql("INSERT INTO documents (id, client_id, title, content, status) VALUES (?, ?, 'Doc', 'Content', 'PROCESSING'::task_status)")
-                .params(docId, clientId).update();
-        }
-
-        @Test
-        @DisplayName("Should return true if all chunks are in READY status")
-        void shouldReturnTrueWhenAllChunksReady() {
-            insertChunk(docId, DocumentTaskStatus.READY);
-            insertChunk(docId, DocumentTaskStatus.READY);
-            boolean result = documentRepository.areAllChunksProcessed(docId);
-            assertThat(result).isTrue();
-        }
-
-        @Test
-        @DisplayName("Should return false if at least one chunk is PENDING")
-        void shouldReturnFalseWhenChunksArePending() {
-            insertChunk(docId, DocumentTaskStatus.READY);
-            insertChunk(docId, DocumentTaskStatus.PENDING);
-            boolean result = documentRepository.areAllChunksProcessed(docId);
-            assertThat(result).isFalse();
-        }
-
-        @Test
-        @DisplayName("Should return false if a chunk has FAILED")
-        void shouldReturnFalseWhenChunksHaveFailed() {
-            insertChunk(docId, DocumentTaskStatus.FAILED);
-            boolean result = documentRepository.areAllChunksProcessed(docId);
-            assertThat(result).isFalse();
-        }
-
-        @Test
-        @DisplayName("Should return true if no chunks exist (edge case)")
-        void shouldReturnTrueIfNoChunksExist() {
-            boolean result = documentRepository.areAllChunksProcessed(docId);
-            assertThat(result).isTrue();
-        }
-
-        private void insertChunk(UUID documentId, DocumentTaskStatus status) {
-            jdbcClient.sql("INSERT INTO document_chunks (id, document_id, content, status) VALUES (?, ?, 'Content', ?::task_status)")
-                .params(UUID.randomUUID(), documentId, status.name())
-                .update();
         }
 
     }

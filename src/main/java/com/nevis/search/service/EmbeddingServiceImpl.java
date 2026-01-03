@@ -2,8 +2,7 @@ package com.nevis.search.service;
 
 import com.nevis.search.exception.EmbeddingMismatchException;
 import com.nevis.search.model.DocumentChunk;
-import com.nevis.search.model.DocumentTaskStatus;
-import com.nevis.search.repository.DocumentRepository;
+import com.nevis.search.repository.DocumentChunkRepository;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
@@ -28,7 +27,7 @@ import java.util.stream.IntStream;
 public class EmbeddingServiceImpl implements EmbeddingService {
 
     private final DocumentService documentService;
-    private final DocumentRepository repository;
+    private final DocumentChunkRepository chunkRepository;
     private final EmbeddingModel embeddingModel;
 
     @Retryable(
@@ -41,7 +40,7 @@ public class EmbeddingServiceImpl implements EmbeddingService {
         backoff = @Backoff(delay = 2000, multiplier = 2.0)
     )
     public void generateForDocument(UUID docId) {
-        List<DocumentChunk> pendingChunks = repository.findChunksByStatusDocId(docId, DocumentTaskStatus.PENDING);
+        List<DocumentChunk> pendingChunks = chunkRepository.startProcessing(docId);
 
         if (pendingChunks.isEmpty()) {
             return;
@@ -99,8 +98,8 @@ public class EmbeddingServiceImpl implements EmbeddingService {
 
     @Recover
     public void recover(Exception e, UUID docId) {
-        log.error("Permanently failed to process document {}. Error: {}", docId, e.getMessage());
-        repository.updateEmbeddingStatus(docId, DocumentTaskStatus.FAILED, e.getMessage());
+        log.error("Failed to process document {}. Error: {}", docId, e.getMessage());
+        chunkRepository.markAllDocumentChunksAsFailed(docId, e.getMessage());
     }
 
 }

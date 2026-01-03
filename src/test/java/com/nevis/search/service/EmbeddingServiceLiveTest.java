@@ -3,6 +3,7 @@ package com.nevis.search.service;
 import com.nevis.search.config.LangChainConfig;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
+import com.nevis.search.repository.DocumentChunkRepository;
 import com.nevis.search.repository.DocumentRepository;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import org.junit.jupiter.api.*;
@@ -33,6 +34,9 @@ class EmbeddingServiceLiveTest {
     private DocumentRepository repository;
 
     @MockitoBean
+    private DocumentChunkRepository chunkRepository;
+
+    @MockitoBean
     private DocumentService documentService;
 
     @Autowired
@@ -40,7 +44,7 @@ class EmbeddingServiceLiveTest {
 
     @BeforeEach
     void setUp() {
-        embeddingService = new EmbeddingServiceImpl(documentService, repository, embeddingModel);
+        embeddingService = new EmbeddingServiceImpl(documentService, chunkRepository, embeddingModel);
     }
 
     @Test
@@ -53,7 +57,7 @@ class EmbeddingServiceLiveTest {
         DocumentChunk mockChunk = new DocumentChunk(chunkId, docId, content, null,
             DocumentTaskStatus.PENDING, null, 0, null, null);
 
-        when(repository.findChunksByStatusDocId(docId, DocumentTaskStatus.PENDING))
+        when(chunkRepository.startProcessing(docId))
             .thenReturn(List.of(mockChunk));
 
         embeddingService.generateForDocument(docId);

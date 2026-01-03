@@ -2,6 +2,7 @@ package com.nevis.search.service;
 
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
+import com.nevis.search.repository.DocumentChunkRepository;
 import com.nevis.search.repository.DocumentRepository;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.model.embedding.EmbeddingModel;
@@ -30,6 +31,10 @@ class EmbeddingServiceTest {
 
     @MockitoBean
     private DocumentRepository repository;
+
+    @MockitoBean
+    private DocumentChunkRepository chunkRepository;
+
     @MockitoBean
     private DocumentService documentService;
     @MockitoBean
@@ -63,7 +68,7 @@ class EmbeddingServiceTest {
         embeddingService.generateForDocument(docId);
 
         verify(embeddingModel, times(3)).embedAll(anyList());
-        verify(repository).updateEmbeddingStatus(eq(docId), eq(DocumentTaskStatus.FAILED), anyString());
+        verify(chunkRepository).markAllDocumentChunksAsFailed(eq(docId), anyString());
     }
 
     @Test
@@ -73,7 +78,7 @@ class EmbeddingServiceTest {
         DocumentChunk chunk = new DocumentChunk(chunkId, docId, "text", null,
             DocumentTaskStatus.PENDING, null, 0, null, null);
 
-        when(repository.findChunksByStatusDocId(docId, DocumentTaskStatus.PENDING))
+        when(chunkRepository.startProcessing(docId))
             .thenReturn(List.of(chunk));
 
         when(embeddingModel.embedAll(anyList()))
@@ -96,9 +101,8 @@ class EmbeddingServiceTest {
         embeddingService.generateForDocument(docId);
         verify(embeddingModel, times(1)).embedAll(anyList());
 
-        verify(repository).updateEmbeddingStatus(
+        verify(chunkRepository).markAllDocumentChunksAsFailed(
             eq(docId),
-            eq(DocumentTaskStatus.FAILED),
             contains("Fatal developer error")
         );
     }
@@ -106,7 +110,7 @@ class EmbeddingServiceTest {
     @Test
     @DisplayName("Should do nothing if no pending chunks found")
     void shouldHandleNoPendingChunks() {
-        when(repository.findChunksByStatusDocId(docId, DocumentTaskStatus.PENDING))
+        when(chunkRepository.startProcessing(docId))
             .thenReturn(List.of());
 
         embeddingService.generateForDocument(docId);
@@ -121,6 +125,6 @@ class EmbeddingServiceTest {
             .mapToObj(i -> new DocumentChunk(UUID.randomUUID(), docId, "content " + i, null,
                 DocumentTaskStatus.PENDING, null, 0, null, null))
             .toList();
-        when(repository.findChunksByStatusDocId(docId, DocumentTaskStatus.PENDING)).thenReturn(chunks);
+        when(chunkRepository.startProcessing(docId)).thenReturn(chunks);
     }
 }

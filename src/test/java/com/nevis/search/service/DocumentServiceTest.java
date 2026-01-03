@@ -2,6 +2,7 @@ package com.nevis.search.service;
 
 import com.nevis.search.model.Document;
 import com.nevis.search.model.DocumentTaskStatus;
+import com.nevis.search.repository.DocumentChunkRepository;
 import com.nevis.search.repository.DocumentRepository;
 import dev.langchain4j.data.segment.TextSegment;
 import org.junit.jupiter.api.DisplayName;
@@ -21,7 +22,8 @@ import static org.mockito.Mockito.*;
 class DocumentServiceTest {
 
     private final DocumentRepository repository = Mockito.mock(DocumentRepository.class);
-    private final DocumentService documentService = new DocumentServiceImpl(repository);
+    private final DocumentChunkRepository chunkRepository = Mockito.mock(DocumentChunkRepository.class);
+    private final DocumentService documentService = new DocumentServiceImpl(repository, chunkRepository);
 
     @Nested
     @DisplayName("Split document to chunks")
@@ -47,7 +49,7 @@ class DocumentServiceTest {
             Document result = documentService.ingestDocument("Test", content, clientId);
 
             ArgumentCaptor<List<TextSegment>> captor = ArgumentCaptor.forClass(List.class);
-            verify(repository).saveChunks(eq(docId), captor.capture());
+            verify(chunkRepository).saveChunks(eq(docId), captor.capture());
 
             List<TextSegment> segments = captor.getValue();
 
@@ -76,7 +78,7 @@ class DocumentServiceTest {
             documentService.ingestDocument("Exact", content, clientId);
 
             ArgumentCaptor<List<TextSegment>> captor = ArgumentCaptor.forClass(List.class);
-            verify(repository).saveChunks(eq(docId), captor.capture());
+            verify(chunkRepository).saveChunks(eq(docId), captor.capture());
 
             assertThat(captor.getValue()).hasSize(1);
         }
@@ -93,8 +95,8 @@ class DocumentServiceTest {
 
             documentService.ingestDocument("Empty", content, clientId);
 
-            verify(repository, never()).saveChunks(any(), any());
-            verify(repository).updateDocumentStatus(docId, DocumentTaskStatus.READY);
+            verify(chunkRepository, never()).saveChunks(any(), any());
+            verify(repository).updateStatus(docId, DocumentTaskStatus.READY);
         }
 
         @Test
@@ -109,8 +111,8 @@ class DocumentServiceTest {
 
             documentService.ingestDocument("Short", content, clientId);
 
-            verify(repository).saveChunks(eq(docId), anyList());
-            verify(repository).updateDocumentStatus(docId, DocumentTaskStatus.PROCESSING);
+            verify(chunkRepository).saveChunks(eq(docId), anyList());
+            verify(repository).updateStatus(docId, DocumentTaskStatus.PROCESSING);
         }
 
         @Test
@@ -125,8 +127,8 @@ class DocumentServiceTest {
 
             documentService.ingestDocument("Whitespace", content, clientId);
 
-            verify(repository, never()).saveChunks(any(), any());
-            verify(repository).updateDocumentStatus(docId, DocumentTaskStatus.READY);
+            verify(chunkRepository, never()).saveChunks(any(), any());
+            verify(repository).updateStatus(docId, DocumentTaskStatus.READY);
         }
 
         @Test
@@ -141,7 +143,7 @@ class DocumentServiceTest {
 
             documentService.ingestDocument("LargeWord", content, clientId);
 
-            verify(repository).updateDocumentStatus(docId, DocumentTaskStatus.PROCESSING);
+            verify(repository).updateStatus(docId, DocumentTaskStatus.PROCESSING);
         }
     }
 
@@ -157,8 +159,8 @@ class DocumentServiceTest {
             documentService.saveEmbeddings(docId, null);
             documentService.saveEmbeddings(docId, Map.of());
 
-            verify(repository, never()).updateEmbeddingChunkVector(any(), any());
-            verify(repository, never()).updateDocumentStatus(any(), any());
+            verify(chunkRepository, never()).updateVector(any(), any());
+            verify(repository, never()).updateStatus(any(), any());
         }
 
         @Test
@@ -167,11 +169,11 @@ class DocumentServiceTest {
             UUID chunk1 = UUID.randomUUID();
             Map<UUID, float[]> embeddings = Map.of(chunk1, new float[]{0.1f});
 
-            when(repository.areAllChunksProcessed(docId)).thenReturn(false);
+            when(chunkRepository.areAllChunksProcessed(docId)).thenReturn(false);
             documentService.saveEmbeddings(docId, embeddings);
 
-            verify(repository).updateEmbeddingChunkVector(eq(chunk1), any(float[].class));
-            verify(repository, never()).updateDocumentStatus(any(), any());
+            verify(chunkRepository).updateVector(eq(chunk1), any(float[].class));
+            verify(repository, never()).updateStatus(any(), any());
         }
 
         @Test
@@ -184,14 +186,14 @@ class DocumentServiceTest {
                 chunk2, new float[]{0.2f}
             );
 
-            when(repository.areAllChunksProcessed(docId)).thenReturn(true);
+            when(chunkRepository.areAllChunksProcessed(docId)).thenReturn(true);
 
             documentService.saveEmbeddings(docId, embeddings);
 
-            verify(repository).updateEmbeddingChunkVector(eq(chunk1), any());
-            verify(repository).updateEmbeddingChunkVector(eq(chunk2), any());
+            verify(chunkRepository).updateVector(eq(chunk1), any());
+            verify(chunkRepository).updateVector(eq(chunk2), any());
 
-            verify(repository).updateDocumentStatus(docId, DocumentTaskStatus.READY);
+            verify(repository).updateStatus(docId, DocumentTaskStatus.READY);
         }
     }
 

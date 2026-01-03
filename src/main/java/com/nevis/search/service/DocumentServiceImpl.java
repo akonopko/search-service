@@ -2,6 +2,7 @@ package com.nevis.search.service;
 
 import com.nevis.search.model.Document;
 import com.nevis.search.model.DocumentTaskStatus;
+import com.nevis.search.repository.DocumentChunkRepository;
 import com.nevis.search.repository.DocumentRepository;
 import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.document.splitter.DocumentSplitters;
@@ -23,6 +24,7 @@ import static java.util.Collections.emptyList;
 public class DocumentServiceImpl implements DocumentService {
 
     private final DocumentRepository repository;
+    private final DocumentChunkRepository chunkRepository;
     private final DocumentSplitter splitter = DocumentSplitters.recursive(3000, 300);
 
     @Transactional
@@ -33,10 +35,10 @@ public class DocumentServiceImpl implements DocumentService {
 
         List<TextSegment> segments = getSplittedChunks(content);
         if (segments.isEmpty()) {
-            repository.updateDocumentStatus(savedDoc.id(), DocumentTaskStatus.READY);
+            repository.updateStatus(savedDoc.id(), DocumentTaskStatus.READY);
         } else {
-            repository.saveChunks(savedDoc.id(), segments);
-            repository.updateDocumentStatus(savedDoc.id(), DocumentTaskStatus.PROCESSING);
+            chunkRepository.saveChunks(savedDoc.id(), segments);
+            repository.updateStatus(savedDoc.id(), DocumentTaskStatus.PROCESSING);
         }
 
         return savedDoc;
@@ -60,11 +62,11 @@ public class DocumentServiceImpl implements DocumentService {
 
         log.info("Doc {}: Updating {} chunk embeddings in database", docId, embeddingMap.size());
 
-        embeddingMap.forEach(repository::updateEmbeddingChunkVector);
+        embeddingMap.forEach(chunkRepository::updateVector);
 
-        if (repository.areAllChunksProcessed(docId)) {
+        if (chunkRepository.areAllChunksProcessed(docId)) {
             log.info("Doc {}: Updating status to Ready", docId);
-            repository.updateDocumentStatus(docId, DocumentTaskStatus.READY);
+            repository.updateStatus(docId, DocumentTaskStatus.READY);
         }
     }
 
