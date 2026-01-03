@@ -1,5 +1,7 @@
 package com.nevis.search.repository;
 
+import com.nevis.search.exception.ChunkNotFoundException;
+import com.nevis.search.exception.DocumentNotFoundException;
 import com.nevis.search.model.Document;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
@@ -100,26 +102,44 @@ public class JdbcDocumentRepository implements DocumentRepository {
             .optional();
     }
 
-    public List<DocumentChunk> findEmbeddingPendingChunksByDocId(UUID docId) {
+    @Override
+    public List<DocumentChunk> findChunksByStatusDocId(UUID docId, DocumentTaskStatus status) {
         String sql = """
             SELECT id, document_id, content, chunk_summary, 
                    status, error_message, 
                    attempts, created_at, updated_at
             FROM document_chunks
-            WHERE document_id = :docId AND status = 'PENDING'
+            WHERE document_id = :docId AND status = :status::task_status
             ORDER BY created_at ASC
             """;
 
         return jdbcClient.sql(sql)
             .param("docId", docId)
+            .param("status", status.name())
             .query(documentChunkMapper)
             .list();
     }
 
-    @Override
-    public void updateEmbeddingStatus(UUID id, DocumentTaskStatus status) {
+    public boolean areAllChunksProcessed(UUID docId) {
         String sql = """
-        UPDATE document_chunks 
+        SELECT COUNT(*) 
+        FROM document_chunks 
+        WHERE document_id = :docId 
+          AND status != 'READY'::task_status
+        """;
+
+        Integer count = jdbcClient.sql(sql)
+            .param("docId", docId)
+            .query(Integer.class)
+            .single();
+
+        return count == 0;
+    }
+
+    @Override
+    public void updateDocumentStatus(UUID id, DocumentTaskStatus status) {
+        String sql = """
+        UPDATE documents 
         SET status = :status::task_status
         WHERE id = :id
         """;
@@ -130,7 +150,32 @@ public class JdbcDocumentRepository implements DocumentRepository {
             .update();
 
         if (rowsAffected == 0) {
-            throw new RuntimeException("Could not update status: Chunk not found with id " + id);
+            throw new DocumentNotFoundException(id);
+        }
+    }
+
+    @Override
+    public void updateEmbeddingStatus(UUID id, DocumentTaskStatus status) {
+        updateEmbeddingStatus(id, status, null);
+    }
+
+    @Override
+    public void updateEmbeddingStatus(UUID id, DocumentTaskStatus status, String error) {
+        String sql = """
+            UPDATE document_chunks 
+            SET status = :status::task_status,
+                error_message = :error
+            WHERE id = :id
+            """;
+
+        int rowsAffected = jdbcClient.sql(sql)
+            .param("status", status.name())
+            .param("error", error) // Can be null
+            .param("id", id)
+            .update();
+
+        if (rowsAffected == 0) {
+            throw new ChunkNotFoundException(id);
         }
     }
 
@@ -146,7 +191,7 @@ public class JdbcDocumentRepository implements DocumentRepository {
             .update();
 
         if (rowsAffected == 0) {
-            throw new RuntimeException("Chunk not found: " + id);
+            throw new ChunkNotFoundException(id);
         }
     }
 

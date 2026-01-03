@@ -13,7 +13,10 @@ public interface DocumentRepository {
     Document save(Document document);
     void saveChunks(UUID docId, List<TextSegment> segments);
     Optional<Document> findById(UUID id);
-    List<DocumentChunk> findEmbeddingPendingChunksByDocId(UUID id);
+    List<DocumentChunk> findChunksByStatusDocId(UUID id, DocumentTaskStatus status);
+    boolean areAllChunksProcessed(UUID docId);
+    void updateDocumentStatus(UUID id, DocumentTaskStatus status);
     void updateEmbeddingStatus(UUID id, DocumentTaskStatus status);
+    void updateEmbeddingStatus(UUID id, DocumentTaskStatus status, String error);
     void updateEmbeddingChunkVector(UUID id, float[] vector);
 }
