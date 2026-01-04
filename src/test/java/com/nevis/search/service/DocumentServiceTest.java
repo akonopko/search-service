@@ -33,10 +33,10 @@ class DocumentServiceTest {
         @DisplayName("Should split real technical text into logical chunks with overlap")
         void shouldSplitContentLogically() {
             String chunk = """
-        Chapter 1: The Basics. Java is a versatile language.
-        Chapter 2: Advanced AI. Integrating LLMs into Java applications in 2026 
-        requires a deep understanding of vector databases and embedding models.
-        """;
+                Chapter 1: The Basics. Java is a versatile language.
+                Chapter 2: Advanced AI. Integrating LLMs into Java applications in 2026 
+                requires a deep understanding of vector databases and embedding models.
+                """;
             String content = chunk.repeat(50);
 
             UUID clientId = UUID.randomUUID();
@@ -153,46 +153,49 @@ class DocumentServiceTest {
 
         private final UUID docId = UUID.randomUUID();
 
+        private final UUID chunkId = UUID.randomUUID();
+
         @Test
         @DisplayName("Should return early if embedding map is null or empty")
         void saveEmbeddings_EmptyMap_DoesNothing() {
-            documentService.saveEmbeddings(docId, null);
-            documentService.saveEmbeddings(docId, Map.of());
+            documentService.saveEmbeddings(docId, chunkId, null);
+            documentService.saveEmbeddings(docId, chunkId, Map.of());
 
-            verify(chunkRepository, never()).updateVector(any(), any());
+            verify(chunkRepository, never()).insertChunkVector(any(), any(), any(), any());
             verify(repository, never()).updateStatus(any(), any());
         }
 
         @Test
-        @DisplayName("Should update chunks but NOT set READY if some chunks are still processing")
-        void saveEmbeddings_NotAllFinished_OnlyUpdatesChunks() {
-            UUID chunk1 = UUID.randomUUID();
-            Map<UUID, float[]> embeddings = Map.of(chunk1, new float[]{0.1f});
+        @DisplayName("Should update specific chunk and terms but NOT set document to READY if some chunks are still pending")
+        void saveEmbeddings_NotAllFinished_OnlyUpdatesSpecificChunk() {
+            UUID chunkId = UUID.randomUUID();
+            String term1 = "sample term";
+            float[] vector1 = new float[]{0.1f};
+            Map<String, float[]> embeddingMap = Map.of(term1, vector1);
 
             when(chunkRepository.areAllChunksProcessed(docId)).thenReturn(false);
-            documentService.saveEmbeddings(docId, embeddings);
-
-            verify(chunkRepository).updateVector(eq(chunk1), any(float[].class));
+            documentService.saveEmbeddings(docId, chunkId, embeddingMap);
+            verify(chunkRepository).insertChunkVector(eq(docId), eq(chunkId), eq(term1), eq(vector1));
+            verify(chunkRepository).updateStatus(chunkId, DocumentTaskStatus.READY);
             verify(repository, never()).updateStatus(any(), any());
         }
 
         @Test
-        @DisplayName("Should update document to READY when all chunks are processed")
+        @DisplayName("Should update document to READY when the last chunk is processed")
         void saveEmbeddings_AllFinished_SetsDocumentToReady() {
-            UUID chunk1 = UUID.randomUUID();
-            UUID chunk2 = UUID.randomUUID();
-            Map<UUID, float[]> embeddings = Map.of(
-                chunk1, new float[]{0.1f},
-                chunk2, new float[]{0.2f}
+            UUID chunkId = UUID.randomUUID();
+            Map<String, float[]> embeddingMap = Map.of(
+                "term A", new float[]{0.1f},
+                "term B", new float[]{0.2f}
             );
 
             when(chunkRepository.areAllChunksProcessed(docId)).thenReturn(true);
+            documentService.saveEmbeddings(docId, chunkId, embeddingMap);
 
-            documentService.saveEmbeddings(docId, embeddings);
+            verify(chunkRepository).insertChunkVector(eq(docId), eq(chunkId), eq("term A"), any(float[].class));
+            verify(chunkRepository).insertChunkVector(eq(docId), eq(chunkId), eq("term B"), any(float[].class));
 
-            verify(chunkRepository).updateVector(eq(chunk1), any());
-            verify(chunkRepository).updateVector(eq(chunk2), any());
-
+            verify(chunkRepository).updateStatus(chunkId, DocumentTaskStatus.READY);
             verify(repository).updateStatus(docId, DocumentTaskStatus.READY);
         }
     }
