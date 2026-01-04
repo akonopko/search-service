@@ -1,7 +1,7 @@
 package com.nevis.search.repository;
 
 import com.nevis.search.model.Client;
-import com.nevis.search.model.SearchResponse;
+import com.nevis.search.model.ClientSearchResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -63,9 +63,9 @@ public class JdbcClientRepository implements ClientRepository {
 
     @Override
     @Transactional(readOnly = true)
-    public SearchResponse search(String query) {
+    public ClientSearchResponse search(String query) {
         if (query == null || query.isBlank()) {
-            return new SearchResponse(List.of(), List.of());
+            return new ClientSearchResponse(List.of(), List.of());
         }
 
         jdbcClient.sql(String.format(
@@ -100,7 +100,7 @@ public class JdbcClientRepository implements ClientRepository {
                 rs.getBoolean("is_exact")
             )).list();
 
-        return new SearchResponse(
+        return new ClientSearchResponse(
             results.stream().filter(ClientWithScore::isExact).map(ClientWithScore::client).toList(),
             results.stream().filter(r -> !r.isExact()).map(ClientWithScore::client).toList()
         );
