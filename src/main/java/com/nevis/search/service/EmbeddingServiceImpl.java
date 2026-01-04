@@ -1,5 +1,6 @@
 package com.nevis.search.service;
 
+import com.nevis.search.exception.EmbeddingException;
 import com.nevis.search.exception.EmbeddingMismatchException;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.repository.DocumentChunkRepository;
@@ -72,6 +73,34 @@ public class EmbeddingServiceImpl implements EmbeddingService {
             .collect(Collectors.toMap(i -> pendingChunks.get(i).id(), i -> embeddings.get(i).vector()));
 
         documentService.saveEmbeddings(docId, embeddingMap);
+    }
+
+    @Override
+    public float[] embedQuery(String inputQuery) {
+        if (inputQuery == null || inputQuery.isBlank()) {
+            throw new IllegalArgumentException("Query cannot be empty");
+        }
+
+        String query = inputQuery.trim().toLowerCase();
+        if (query.length() > 1000) {
+            query = query.substring(0, 1000);
+            log.warn("Query was truncated for embedding: {}", query);
+        }
+
+        log.debug("Generating embedding for query: '{}'", query);
+
+        try {
+            float[] vector = embeddingModel.embed(query).content().vector();
+            if (vector == null || vector.length == 0) {
+                throw new IllegalStateException("Embedding model returned an empty vector for query: " + query);
+            }
+
+            return vector;
+
+        } catch (Exception e) {
+            log.error("Failed to generate embedding for query: {}", query, e);
+            throw new EmbeddingException("Error during query vectorization", e);
+        }
     }
 
     private void validateSegments(List<TextSegment> segments, UUID docId) {
