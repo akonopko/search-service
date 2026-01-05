@@ -18,4 +18,5 @@ public interface DocumentChunkRepository {
     void markAsFailed(UUID id, String error);
     void insertChunkVector(UUID docId, UUID chunkId, String content, float[] vector);
     List<DocumentSearchResult> findSimilar(float[] vector, int limit, Optional<UUID> clientId);
+    List<UUID> resetStaleAndFailedChunks();
 }

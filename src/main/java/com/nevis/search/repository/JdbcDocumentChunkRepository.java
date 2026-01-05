@@ -1,7 +1,6 @@
 package com.nevis.search.repository;
 
 import com.nevis.search.exception.ChunkNotFoundException;
-import com.nevis.search.exception.DocumentNotFoundException;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
 import com.nevis.search.service.DocumentSearchResult;
@@ -9,6 +8,7 @@ import com.pgvector.PGvector;
 import dev.langchain4j.data.segment.TextSegment;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -17,7 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.PreparedStatement;
 import java.time.OffsetDateTime;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,8 +26,16 @@ import java.util.UUID;
 public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
 
     private final JdbcClient jdbcClient;
-
     private final JdbcTemplate jdbcTemplate;
+
+    @Value("${app.worker.max-attempts:5}")
+    private int maxAttempts;
+
+    @Value("${app.worker.stale-threshold-minutes:5}")
+    private int staleThresholdMinutes;
+
+    @Value("${app.document.similarity-threshold:0.5}")
+    private double documentSimilarityThreshold;
 
     private final RowMapper<DocumentChunk> documentChunkMapper = (rs, rowNum) -> new DocumentChunk(
         rs.getObject("id", UUID.class),
@@ -42,6 +49,7 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
         rs.getObject("updated_at", OffsetDateTime.class)
     );
 
+    @Override
     public void saveChunks(UUID docId, List<TextSegment> segments) {
         if (segments == null || segments.isEmpty()) {
             return;
@@ -72,22 +80,27 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
     @Transactional
     public Optional<DocumentChunk> claimNextPendingChunk(UUID docId) {
         String sql = """
-        UPDATE document_chunks 
-        SET status = 'PROCESSING'::task_status, updated_at = NOW()
-        WHERE id = (
-            SELECT id FROM document_chunks 
-            WHERE document_id = :docId AND status = 'PENDING'::task_status
-            ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED
-        )
-        RETURNING *
-        """;
+            UPDATE document_chunks 
+            SET status = 'PROCESSING'::task_status, updated_at = NOW()
+            WHERE id = (
+                SELECT id FROM document_chunks 
+                WHERE document_id = :docId 
+                  AND status = 'PENDING'::task_status
+                  AND attempts < :maxAttempts
+                ORDER BY created_at ASC 
+                LIMIT 1 FOR UPDATE SKIP LOCKED
+            )
+            RETURNING *
+            """;
 
         return jdbcClient.sql(sql)
             .param("docId", docId)
-            .query(DocumentChunk.class)
+            .param("maxAttempts", maxAttempts)
+            .query(documentChunkMapper)
             .optional();
     }
 
+    @Override
     public int countPendingByDocumentId(UUID docId) {
         String sql = """
             SELECT COUNT(*) 
@@ -102,6 +115,7 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
             .single();
     }
 
+    @Override
     public boolean areAllChunksProcessed(UUID docId) {
         String sql = """
             SELECT COUNT(*) 
@@ -118,12 +132,11 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
         return count == 0;
     }
 
-
     @Override
     public void updateStatus(UUID chunkId, DocumentTaskStatus status) {
         String sql = """
             UPDATE document_chunks 
-            SET status = :status::task_status
+            SET status = :status::task_status, updated_at = NOW()
             WHERE id = :id
             """;
 
@@ -138,25 +151,27 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
     }
 
     @Override
-    public void markAsFailed(UUID documentId, String error) {
+    public void markAsFailed(UUID chunkId, String error) {
         String sql = """
             UPDATE document_chunks 
             SET status = :status::task_status,
-                error_message = :error
+                error_message = :error,
+                updated_at = NOW()
             WHERE id = :id
             """;
 
         int rowsAffected = jdbcClient.sql(sql)
             .param("status", DocumentTaskStatus.FAILED.name())
             .param("error", error)
-            .param("id", documentId)
+            .param("id", chunkId)
             .update();
 
         if (rowsAffected == 0) {
-            throw new DocumentNotFoundException(documentId);
+            throw new ChunkNotFoundException(chunkId);
         }
     }
 
+    @Override
     public void insertChunkVector(UUID docId, UUID chunkId, String content, float[] vector) {
         String sql = """
             INSERT INTO 
@@ -175,12 +190,13 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
 
     @Override
     public List<DocumentSearchResult> findSimilar(float[] vector, int limit, Optional<UUID> clientId) {
-        String vectorStr = Arrays.toString(vector);
+        PGvector pgVector = new PGvector(vector);
 
+        // We use 1 - (dist) to convert distance to a similarity score (0.0 to 1.0)
         String sql = """
                  SELECT
                      ce.content,
-                     1 - (ce.embedding <=> :vector::vector) as score,
+                     1 - (ce.embedding <=> :vector) as score,
                      d.title,
                      d.id as doc_id
                  FROM document_chunk_embeddings ce
@@ -189,25 +205,45 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
                  """ +
                      clientId.map(x -> "d.client_id = :clientId AND ").orElse("") +
                      """
-                       1 - (ce.embedding <=> :vector::vector) > :threshold
-                     ORDER BY ce.embedding <=> :vector::vector ASC
+                       1 - (ce.embedding <=> :vector) > :threshold
+                     ORDER BY ce.embedding <=> :vector ASC
                      LIMIT :limit
                      """;
 
         var client = jdbcClient.sql(sql)
-            .param("vector", vectorStr)
+            .param("vector", pgVector)
             .param("limit", limit)
-            .param("threshold", 0.5);
+            .param("threshold", documentSimilarityThreshold);
 
         clientId.ifPresent(uuid -> client.param("clientId", uuid));
 
         return client.query((rs, rowNum) -> new DocumentSearchResult(
-                rs.getObject("doc_id", UUID.class),
-                rs.getString("title"),
-                rs.getString("content"),
-                rs.getDouble("score")
-            ))
-            .list();
+            rs.getObject("doc_id", UUID.class),
+            rs.getString("title"),
+            rs.getString("content"),
+            rs.getDouble("score")
+        )).list();
     }
 
+    @Override
+    public List<UUID> resetStaleAndFailedChunks() {
+        String sql = """
+            UPDATE document_chunks 
+            SET status = 'PENDING'::task_status, 
+                attempts = attempts + 1, 
+                updated_at = NOW()
+            WHERE (
+                status = 'FAILED'::task_status 
+                OR (status = 'PROCESSING'::task_status AND updated_at < NOW() - (INTERVAL '1 minute' * :staleMins))
+            )
+            AND attempts < :maxAttempts   
+            RETURNING document_id        
+            """;
+
+        return jdbcClient.sql(sql)
+            .param("maxAttempts", maxAttempts)
+            .param("staleMins", staleThresholdMinutes)
+            .query(UUID.class)
+            .list();
+    }
 }

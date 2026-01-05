@@ -260,7 +260,6 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         void shouldUpdateDocumentStatus() {
             documentRepository.updateStatus(documentId, DocumentTaskStatus.READY);
 
-            // Assert
             String currentStatus = jdbcClient.sql("SELECT status::text FROM documents WHERE id = ?")
                 .param(documentId)
                 .query(String.class).single();
@@ -535,6 +534,102 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
                 }
                 return vector;
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Maintenance: resetStaleAndFailedChunks")
+    class MaintenanceResetTest {
+
+        private UUID docId;
+
+        @BeforeEach
+        void setUp() {
+            jdbcClient.sql("DELETE FROM document_chunks").update();
+            jdbcClient.sql("DELETE FROM clients").update();
+            jdbcClient.sql("DELETE FROM documents").update();
+
+            UUID clientId = UUID.randomUUID();
+            jdbcClient.sql("INSERT INTO clients (id, first_name, last_name, email) VALUES (?, 'Maint', 'Test', 'maint@test.com')")
+                .params(clientId).update();
+
+            docId = UUID.randomUUID();
+            jdbcClient.sql("INSERT INTO documents (id, client_id, title, content, status) VALUES (?, ?, 'Maint Doc', 'Content', 'READY')")
+                .params(docId, clientId).update();
+        }
+
+        @Test
+        @DisplayName("Should recover FAILED chunks and increment attempts")
+        void shouldRecoverFailedChunks() {
+            UUID chunkId = insertChunkAtState(docId, DocumentTaskStatus.FAILED, 0, OffsetDateTime.now());
+
+            List<UUID> affectedDocs = chunkRepository.resetStaleAndFailedChunks();
+
+            assertThat(affectedDocs).containsExactly(docId);
+
+            var updated = getChunkRaw(chunkId);
+            assertThat(updated.get("status")).isEqualTo("PENDING");
+            assertThat(updated.get("attempts")).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("Should recover PROCESSING chunks older than threshold")
+        void shouldRecoverStaleProcessingChunks() {
+            OffsetDateTime staleTime = OffsetDateTime.now().minusMinutes(10);
+            UUID chunkId = insertChunkAtState(docId, DocumentTaskStatus.PROCESSING, 0, staleTime);
+
+            List<UUID> affectedDocs = chunkRepository.resetStaleAndFailedChunks();
+
+            assertThat(affectedDocs).containsExactly(docId);
+
+            var updated = getChunkRaw(chunkId);
+            assertThat(updated.get("status")).isEqualTo("PENDING");
+        }
+
+        @Test
+        @DisplayName("Should NOT recover PROCESSING chunks within the time threshold")
+        void shouldNotRecoverRecentProcessingChunks() {
+            UUID chunkId = insertChunkAtState(docId, DocumentTaskStatus.PROCESSING, 0, OffsetDateTime.now());
+
+            List<UUID> affectedDocs = chunkRepository.resetStaleAndFailedChunks();
+
+            assertThat(affectedDocs).isEmpty();
+
+            var updated = getChunkRaw(chunkId);
+            assertThat(updated.get("status")).isEqualTo("PROCESSING");
+            assertThat(updated.get("attempts")).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("Should NOT recover chunks that reached maxAttempts (Dead Letter)")
+        void shouldIgnoreDeadLetterChunks() {
+            UUID chunkId = insertChunkAtState(docId, DocumentTaskStatus.FAILED, 5, OffsetDateTime.now());
+
+            List<UUID> affectedDocs = chunkRepository.resetStaleAndFailedChunks();
+
+            assertThat(affectedDocs).isEmpty();
+
+            var updated = getChunkRaw(chunkId);
+            assertThat(updated.get("status")).isEqualTo("FAILED");
+            assertThat(updated.get("attempts")).isEqualTo(5);
+        }
+
+        private UUID insertChunkAtState(UUID dId, DocumentTaskStatus status, int attempts, OffsetDateTime updatedAt) {
+            UUID id = UUID.randomUUID();
+            jdbcClient.sql("""
+                INSERT INTO document_chunks (id, document_id, content, status, attempts, updated_at)
+                VALUES (?, ?, 'Content', ?::task_status, ?, ?)
+                """)
+                .params(id, dId, status.name(), attempts, updatedAt)
+                .update();
+            return id;
+        }
+
+        private Map<String, Object> getChunkRaw(UUID id) {
+            return jdbcClient.sql("SELECT status::text, attempts FROM document_chunks WHERE id = ?")
+                .param(id)
+                .query()
+                .singleRow();
         }
     }
 
