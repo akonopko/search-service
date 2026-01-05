@@ -1,8 +1,8 @@
 package com.nevis.search.repository;
 
 import com.nevis.search.model.Client;
-import com.nevis.search.model.ClientSearchResponse;
-import com.nevis.search.model.ClientSearchResultItem;
+import com.nevis.search.controller.ClientSearchResponse;
+import com.nevis.search.controller.ClientSearchResultItem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;

@@ -1,7 +1,7 @@
 package com.nevis.search.repository;
 
 import com.nevis.search.model.Client;
-import com.nevis.search.model.ClientSearchResultItem;
+import com.nevis.search.controller.ClientSearchResultItem;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

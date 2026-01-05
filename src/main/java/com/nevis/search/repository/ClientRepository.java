@@ -1,7 +1,7 @@
 package com.nevis.search.repository;
 
 import com.nevis.search.model.Client;
-import com.nevis.search.model.ClientSearchResponse;
+import com.nevis.search.controller.ClientSearchResponse;
 
 import java.util.Optional;
 import java.util.UUID;

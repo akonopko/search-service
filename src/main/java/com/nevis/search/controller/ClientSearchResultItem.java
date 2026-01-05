@@ -1,6 +1,7 @@
-package com.nevis.search.model;
+package com.nevis.search.controller;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.nevis.search.model.Client;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
