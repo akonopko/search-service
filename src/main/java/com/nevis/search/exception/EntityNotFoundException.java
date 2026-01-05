@@ -9,7 +9,7 @@ public class EntityNotFoundException extends RuntimeException {
     private final UUID chunkId;
 
     public EntityNotFoundException(UUID chunkId) {
-        super("Chunk not found: " + chunkId);
+        super("Entity not found: " + chunkId);
         this.chunkId = chunkId;
     }
 }

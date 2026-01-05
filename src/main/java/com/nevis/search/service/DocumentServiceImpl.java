@@ -2,6 +2,7 @@ package com.nevis.search.service;
 
 import com.nevis.search.controller.DocumentResponse;
 import com.nevis.search.event.DocumentIngestedEvent;
+import com.nevis.search.exception.EntityNotFoundException;
 import com.nevis.search.model.Document;
 import com.nevis.search.controller.DocumentSearchResultItem;
 import com.nevis.search.model.DocumentTaskStatus;
@@ -120,7 +121,7 @@ public class DocumentServiceImpl implements DocumentService {
             .map(this::mapToResponse)
             .orElseThrow(() -> {
                 log.warn("Document not found with ID: {}", id);
-                return new com.nevis.search.exception.EntityNotFoundException(id);
+                return new EntityNotFoundException(id);
             });
     }
 
