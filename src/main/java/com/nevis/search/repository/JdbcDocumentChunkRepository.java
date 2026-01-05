@@ -1,9 +1,9 @@
 package com.nevis.search.repository;
 
-import com.nevis.search.exception.ChunkNotFoundException;
+import com.nevis.search.exception.EntityNotFoundException;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
-import com.nevis.search.model.DocumentSearchResultItem;
+import com.nevis.search.controller.DocumentSearchResultItem;
 import com.pgvector.PGvector;
 import dev.langchain4j.data.segment.TextSegment;
 import lombok.RequiredArgsConstructor;
@@ -146,7 +146,7 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
             .update();
 
         if (rowsAffected == 0) {
-            throw new ChunkNotFoundException(chunkId);
+            throw new EntityNotFoundException(chunkId);
         }
     }
 
@@ -167,7 +167,7 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
             .update();
 
         if (rowsAffected == 0) {
-            throw new ChunkNotFoundException(chunkId);
+            throw new EntityNotFoundException(chunkId);
         }
     }
 

@@ -1,5 +1,9 @@
 package com.nevis.search.service;
 
+import com.nevis.search.controller.ClientSearchResponse;
+import com.nevis.search.controller.ClientSearchResultItem;
+import com.nevis.search.controller.DocumentSearchResponse;
+import com.nevis.search.controller.DocumentSearchResultItem;
 import com.nevis.search.model.*;
 import com.nevis.search.repository.ClientRepository;
 import com.nevis.search.repository.DocumentChunkRepository;

@@ -1,4 +1,4 @@
-package com.nevis.search.model;
+package com.nevis.search.controller;
 
 import java.util.List;
 

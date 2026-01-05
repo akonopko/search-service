@@ -1,12 +1,11 @@
 package com.nevis.search.repository;
 
-import com.nevis.search.exception.ChunkNotFoundException;
-import com.nevis.search.exception.DocumentNotFoundException;
+import com.nevis.search.exception.EntityNotFoundException;
 import com.nevis.search.model.Client;
 import com.nevis.search.model.Document;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
-import com.nevis.search.model.DocumentSearchResultItem;
+import com.nevis.search.controller.DocumentSearchResultItem;
 import dev.langchain4j.data.segment.TextSegment;
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.BeforeEach;
@@ -191,7 +190,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         void shouldThrowExceptionWhenChunkNotFoundForStatus() {
             UUID randomId = UUID.randomUUID();
             assertThatThrownBy(() -> chunkRepository.updateStatus(randomId, DocumentTaskStatus.READY))
-                .isInstanceOf(ChunkNotFoundException.class)
+                .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("Chunk not found: " + randomId);
         }
 
@@ -272,7 +271,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         void shouldThrowWhenDocumentNotFound() {
             UUID randomId = UUID.randomUUID();
             assertThatThrownBy(() -> documentRepository.updateStatus(randomId, DocumentTaskStatus.PROCESSING))
-                .isInstanceOf(DocumentNotFoundException.class);
+                .isInstanceOf(EntityNotFoundException.class);
         }
 
         @Test
@@ -308,7 +307,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         void shouldThrowWhenChunkNotFound() {
             UUID randomId = UUID.randomUUID();
             assertThatThrownBy(() -> chunkRepository.updateStatus(randomId, DocumentTaskStatus.READY))
-                .isInstanceOf(ChunkNotFoundException.class);
+                .isInstanceOf(EntityNotFoundException.class);
         }
 
     }

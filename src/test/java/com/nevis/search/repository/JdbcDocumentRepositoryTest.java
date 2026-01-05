@@ -1,12 +1,9 @@
 package com.nevis.search.repository;
 
-import com.nevis.search.exception.ChunkNotFoundException;
-import com.nevis.search.exception.DocumentNotFoundException;
+import com.nevis.search.exception.EntityNotFoundException;
 import com.nevis.search.model.Client;
 import com.nevis.search.model.Document;
-import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
-import dev.langchain4j.data.segment.TextSegment;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,11 +12,9 @@ import org.springframework.test.annotation.DirtiesContext;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -165,7 +160,7 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
         void shouldThrowWhenDocumentNotFound() {
             UUID randomId = UUID.randomUUID();
             assertThatThrownBy(() -> documentRepository.updateStatus(randomId, DocumentTaskStatus.PROCESSING))
-                .isInstanceOf(DocumentNotFoundException.class);
+                .isInstanceOf(EntityNotFoundException.class);
         }
 
     }

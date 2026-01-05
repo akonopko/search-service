@@ -1,5 +1,6 @@
 package com.nevis.search.service;
 
+import com.nevis.search.controller.DocumentResponse;
 import com.nevis.search.model.Document;
 import com.nevis.search.model.DocumentTaskStatus;
 import com.nevis.search.repository.DocumentChunkRepository;
@@ -48,7 +49,7 @@ class DocumentServiceTest {
 
             when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
-            Document result = documentService.ingestDocument("Test", content, clientId);
+            documentService.ingestDocument("Test", content, clientId);
 
             ArgumentCaptor<List<TextSegment>> captor = ArgumentCaptor.forClass(List.class);
             verify(chunkRepository).saveChunks(eq(docId), captor.capture());

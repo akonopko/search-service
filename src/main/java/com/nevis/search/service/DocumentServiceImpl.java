@@ -1,8 +1,9 @@
 package com.nevis.search.service;
 
+import com.nevis.search.controller.DocumentResponse;
 import com.nevis.search.event.DocumentIngestedEvent;
 import com.nevis.search.model.Document;
-import com.nevis.search.model.DocumentSearchResultItem;
+import com.nevis.search.controller.DocumentSearchResultItem;
 import com.nevis.search.model.DocumentTaskStatus;
 import com.nevis.search.repository.DocumentChunkRepository;
 import com.nevis.search.repository.DocumentRepository;
@@ -32,22 +33,49 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentSplitter splitter = DocumentSplitters.recursive(3000, 300);
     private final ApplicationEventPublisher eventPublisher;
 
+    @Override
     @Transactional
-    public Document ingestDocument(String title, String content, UUID clientId) {
-        Document doc = new Document(null, clientId, title, content, null, DocumentTaskStatus.PENDING, null, null);
+    public DocumentResponse ingestDocument(String title, String content, UUID clientId) {
+        log.debug("Ingesting document for client {}: {}", clientId, title);
+
+        Document doc = new Document(
+            null,
+            clientId,
+            title,
+            content,
+            null,
+            DocumentTaskStatus.PENDING,
+            null,
+            null
+        );
 
         Document savedDoc = documentRepository.save(doc);
 
         List<TextSegment> segments = getSplittedChunks(content);
         if (segments.isEmpty()) {
             documentRepository.updateStatus(savedDoc.id(), DocumentTaskStatus.READY);
+            savedDoc = new Document(savedDoc.id(), clientId, title, content, null, DocumentTaskStatus.READY, savedDoc.createdAt(), savedDoc.updatedAt());
         } else {
             chunkRepository.saveChunks(savedDoc.id(), segments);
             documentRepository.updateStatus(savedDoc.id(), DocumentTaskStatus.PROCESSING);
+
             eventPublisher.publishEvent(new DocumentIngestedEvent(savedDoc.id()));
+            savedDoc = new Document(savedDoc.id(), clientId, title, content, null, DocumentTaskStatus.PROCESSING, savedDoc.createdAt(), savedDoc.updatedAt());
         }
 
-        return savedDoc;
+        return mapToResponse(savedDoc);
+    }
+
+    private DocumentResponse mapToResponse(Document doc) {
+        return new DocumentResponse(
+            doc.id(),
+            doc.clientId(),
+            doc.title(),
+            doc.content(),
+            doc.summary(),
+            doc.status(),
+            doc.createdAt()
+        );
     }
 
     private List<TextSegment> getSplittedChunks(String content) {
@@ -82,5 +110,19 @@ public class DocumentServiceImpl implements DocumentService {
     public List<DocumentSearchResultItem> search(float[] queryVector, int limit, Optional<UUID> clientId) {
         return chunkRepository.findSimilar(queryVector, limit, clientId);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DocumentResponse getById(UUID id) {
+        log.debug("Fetching document by ID: {}", id);
+
+        return documentRepository.findById(id)
+            .map(this::mapToResponse)
+            .orElseThrow(() -> {
+                log.warn("Document not found with ID: {}", id);
+                return new com.nevis.search.exception.EntityNotFoundException(id);
+            });
+    }
+
 
 }

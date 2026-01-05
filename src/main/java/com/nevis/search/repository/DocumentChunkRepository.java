@@ -2,7 +2,7 @@ package com.nevis.search.repository;
 
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
-import com.nevis.search.model.DocumentSearchResultItem;
+import com.nevis.search.controller.DocumentSearchResultItem;
 import dev.langchain4j.data.segment.TextSegment;
 
 import java.util.List;

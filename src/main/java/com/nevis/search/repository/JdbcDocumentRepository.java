@@ -1,6 +1,6 @@
 package com.nevis.search.repository;
 
-import com.nevis.search.exception.DocumentNotFoundException;
+import com.nevis.search.exception.EntityNotFoundException;
 import com.nevis.search.model.Document;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
@@ -113,7 +113,7 @@ public class JdbcDocumentRepository implements DocumentRepository {
             .update();
 
         if (rowsAffected == 0) {
-            throw new DocumentNotFoundException(id);
+            throw new EntityNotFoundException(id);
         }
     }
 

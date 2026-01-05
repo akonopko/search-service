@@ -1,8 +1,8 @@
 package com.nevis.search.service;
 
-import com.nevis.search.model.ClientSearchResponse;
-import com.nevis.search.model.DocumentSearchResponse;
-import com.nevis.search.model.DocumentSearchResultItem;
+import com.nevis.search.controller.ClientSearchResponse;
+import com.nevis.search.controller.DocumentSearchResponse;
+import com.nevis.search.controller.DocumentSearchResultItem;
 import com.nevis.search.repository.ClientRepository;
 import com.nevis.search.repository.DocumentChunkRepository;
 import lombok.RequiredArgsConstructor;
