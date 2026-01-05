@@ -2,7 +2,7 @@ package com.nevis.search.repository;
 
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
-import com.nevis.search.service.DocumentSearchResult;
+import com.nevis.search.model.DocumentSearchResultItem;
 import dev.langchain4j.data.segment.TextSegment;
 
 import java.util.List;
@@ -17,6 +17,6 @@ public interface DocumentChunkRepository {
     void updateStatus(UUID chunkId, DocumentTaskStatus status);
     void markAsFailed(UUID id, String error);
     void insertChunkVector(UUID docId, UUID chunkId, String content, float[] vector);
-    List<DocumentSearchResult> findSimilar(float[] vector, int limit, Optional<UUID> clientId);
+    List<DocumentSearchResultItem> findSimilar(float[] vector, int limit, Optional<UUID> clientId);
     List<UUID> resetStaleAndFailedChunks();
 }

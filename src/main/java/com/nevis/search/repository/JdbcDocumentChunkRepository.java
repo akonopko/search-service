@@ -3,7 +3,7 @@ package com.nevis.search.repository;
 import com.nevis.search.exception.ChunkNotFoundException;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
-import com.nevis.search.service.DocumentSearchResult;
+import com.nevis.search.model.DocumentSearchResultItem;
 import com.pgvector.PGvector;
 import dev.langchain4j.data.segment.TextSegment;
 import lombok.RequiredArgsConstructor;
@@ -189,16 +189,20 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
     }
 
     @Override
-    public List<DocumentSearchResult> findSimilar(float[] vector, int limit, Optional<UUID> clientId) {
+    public List<DocumentSearchResultItem> findSimilar(float[] vector, int limit, Optional<UUID> clientId) {
         PGvector pgVector = new PGvector(vector);
 
         // We use 1 - (dist) to convert distance to a similarity score (0.0 to 1.0)
         String sql = """
                  SELECT
                      ce.content,
+                     d.client_id,
                      1 - (ce.embedding <=> :vector) as score,
                      d.title,
-                     d.id as doc_id
+                     d.summary,
+                     d.status,
+                     d.id as doc_id,
+                     d.created_at
                  FROM document_chunk_embeddings ce
                  JOIN documents d ON ce.document_id = d.id
                  WHERE
@@ -217,11 +221,14 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
 
         clientId.ifPresent(uuid -> client.param("clientId", uuid));
 
-        return client.query((rs, rowNum) -> new DocumentSearchResult(
+        return client.query((rs, rowNum) -> new DocumentSearchResultItem(
             rs.getObject("doc_id", UUID.class),
+            rs.getObject("client_id", UUID.class),
             rs.getString("title"),
-            rs.getString("content"),
-            rs.getDouble("score")
+            rs.getDouble("score"),
+            rs.getString("summary"),
+            DocumentTaskStatus.valueOf(rs.getString("status")),
+            rs.getObject("created_at", OffsetDateTime.class)
         )).list();
     }
 

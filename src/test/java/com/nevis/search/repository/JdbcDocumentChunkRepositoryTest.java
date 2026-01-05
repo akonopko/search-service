@@ -6,7 +6,7 @@ import com.nevis.search.model.Client;
 import com.nevis.search.model.Document;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
-import com.nevis.search.service.DocumentSearchResult;
+import com.nevis.search.model.DocumentSearchResultItem;
 import dev.langchain4j.data.segment.TextSegment;
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.BeforeEach;
@@ -456,36 +456,36 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
             UUID clientId = UUID.randomUUID();
             insertTestClient(clientId);
 
+            String summary = "Address: 742 Evergreen Terrace, Springfield. Utility usage details...";
             UUID docId = UUID.randomUUID();
-            insertTestDocument(docId, clientId, "Utility Bill - Jan 2026");
+            insertTestDocument(docId, clientId, summary, "Utility Bill - Jan 2026");
 
-            String chunkContent = "Address: 742 Evergreen Terrace, Springfield. Utility usage details...";
-            UUID chunkId = insertTestChunk(docId, chunkContent);
+            UUID chunkId = insertTestChunk(docId, summary);
 
-            insertTestEmbedding(docId, chunkId, chunkContent, docVector);
+            insertTestEmbedding(docId, chunkId, summary, docVector);
 
-            assertQueryScore(docVector, chunkContent, 1.0, 1.0);
-            assertQueryScore(addressProof, chunkContent, 0.8, 1.0);
-            assertQueryScore(utiliseBilly, chunkContent, 0.5, 0.6);
-            assertQueryScore(aSymbol, chunkContent, 0.5, 0.6);
-            assertQueryScore(utilityBill, chunkContent, 0.5, 0.7);
+            assertQueryScore(docVector, summary, 1.0, 1.0);
+            assertQueryScore(addressProof, summary, 0.8, 1.0);
+            assertQueryScore(utiliseBilly, summary, 0.5, 0.6);
+            assertQueryScore(aSymbol, summary, 0.5, 0.6);
+            assertQueryScore(utilityBill, summary, 0.5, 0.7);
             assertNoResult(gibberish);
         }
 
         private void assertNoResult(float[] queryVector) {
-            List<DocumentSearchResult> results = chunkRepository.findSimilar(queryVector, 1, Optional.empty());
+            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(queryVector, 1, Optional.empty());
 
             assertThat(results).isEmpty();
         }
 
-        private void assertQueryScore(float[] queryVector, String chunkContent, double scoreLower, double scoreUpper) {
-            List<DocumentSearchResult> results = chunkRepository.findSimilar(queryVector, 1, Optional.empty());
+        private void assertQueryScore(float[] queryVector, String summary, double scoreLower, double scoreUpper) {
+            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(queryVector, 1, Optional.empty());
 
             assertThat(results).isNotEmpty();
-            DocumentSearchResult topResult = results.get(0);
+            DocumentSearchResultItem topResult = results.get(0);
 
             assertThat(topResult.title()).isEqualTo("Utility Bill - Jan 2026");
-            assertThat(topResult.content()).isEqualTo(chunkContent);
+            assertThat(topResult.summary()).isEqualTo(summary);
 
             assertThat(topResult.score()).isGreaterThanOrEqualTo(scoreLower);
             assertThat(topResult.score()).isLessThanOrEqualTo(scoreUpper);
@@ -498,10 +498,10 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
             );
         }
 
-        private void insertTestDocument(UUID id, UUID clientId, String title) {
+        private void insertTestDocument(UUID id, UUID clientId, String summary, String title) {
             jdbcTemplate.update(
-                "INSERT INTO documents (id, client_id, title, content, status) VALUES (?, ?, ?, 'Full text', 'READY')",
-                id, clientId, title
+                "INSERT INTO documents (id, client_id, title, summary, content, status) VALUES (?, ?, ?, ?, 'Content', 'READY')",
+                id, clientId, title, summary
             );
         }
 

@@ -2,6 +2,7 @@ package com.nevis.search.service;
 
 import com.nevis.search.event.DocumentIngestedEvent;
 import com.nevis.search.model.Document;
+import com.nevis.search.model.DocumentSearchResultItem;
 import com.nevis.search.model.DocumentTaskStatus;
 import com.nevis.search.repository.DocumentChunkRepository;
 import com.nevis.search.repository.DocumentRepository;
@@ -78,7 +79,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
-    public List<DocumentSearchResult> search(float[] queryVector, int limit, Optional<UUID> clientId) {
+    public List<DocumentSearchResultItem> search(float[] queryVector, int limit, Optional<UUID> clientId) {
         return chunkRepository.findSimilar(queryVector, limit, clientId);
     }
 

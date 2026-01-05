@@ -2,6 +2,7 @@ package com.nevis.search.repository;
 
 import com.nevis.search.model.Client;
 import com.nevis.search.model.ClientSearchResponse;
+import com.nevis.search.model.ClientSearchResultItem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -100,8 +101,14 @@ public class JdbcClientRepository implements ClientRepository {
             )).list();
 
         return new ClientSearchResponse(
-            results.stream().filter(ClientWithScore::isExact).map(ClientWithScore::client).toList(),
-            results.stream().filter(r -> !r.isExact()).map(ClientWithScore::client).toList()
+            results.stream()
+                .filter(ClientWithScore::isExact)
+                .map(r -> ClientSearchResultItem.from(r.client(), r.score()))
+                .toList(),
+            results.stream()
+                .filter(r -> !r.isExact())
+                .map(r -> ClientSearchResultItem.from(r.client(), r.score()))
+                .toList()
         );
     }
 

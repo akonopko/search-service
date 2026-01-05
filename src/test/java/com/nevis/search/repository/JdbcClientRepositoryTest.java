@@ -1,6 +1,7 @@
 package com.nevis.search.repository;
 
 import com.nevis.search.model.Client;
+import com.nevis.search.model.ClientSearchResultItem;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -112,7 +113,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 
 			assertThat(response.matches()).isEmpty();
 			assertThat(response.suggestions())
-				.extracting(Client::firstName)
+				.extracting(ClientSearchResultItem::firstName)
 				.contains("Aleksandr");
 		}
 
@@ -150,7 +151,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 			var response = repository.search("Developer");
 
 			assertThat(response.matches())
-				.extracting(Client::description)
+				.extracting(ClientSearchResultItem::description)
 				.contains("Java Developer");
 		}
 
@@ -178,7 +179,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 			assertThat(response.matches()).isEmpty();
 			assertThat(response.suggestions().size()).isEqualTo(1);
 			assertThat(response.suggestions())
-				.extracting(Client::description)
+				.extracting(ClientSearchResultItem::description)
 				.contains("Python Coder");
 		}
 
@@ -198,7 +199,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 			var response = repository.search("Front");
 
 			assertThat(response.matches())
-				.extracting(Client::description)
+				.extracting(ClientSearchResultItem::description)
 				.contains("Frontend");
 		}
 
