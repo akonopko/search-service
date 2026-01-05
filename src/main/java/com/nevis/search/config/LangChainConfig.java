@@ -20,9 +20,9 @@ public class LangChainConfig {
     public ChatModel chatLanguageModel() {
         return GoogleAiGeminiChatModel.builder()
             .apiKey(apiKey)
-            .modelName("gemini-3-flash")
-            .temperature(0.1)
+            .modelName("gemini-3-flash-preview")
             .timeout(Duration.ofSeconds(60))
+            .maxRetries(5)
             .logRequests(true)
             .logResponses(true)
             .build();
@@ -34,6 +34,7 @@ public class LangChainConfig {
             .apiKey(apiKey)
             .modelName("gemini-embedding-001")
             .outputDimensionality(768)
+            .maxRetries(5)
             .build();
     }
 }
