@@ -1,8 +1,6 @@
 package com.nevis.search.service;
 
-import com.nevis.search.model.Client;
-import com.nevis.search.model.ClientSearchResponse;
-import com.nevis.search.model.DocumentSearchResponse;
+import com.nevis.search.model.*;
 import com.nevis.search.repository.ClientRepository;
 import com.nevis.search.repository.DocumentChunkRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -38,9 +36,6 @@ class SearchServiceTest {
     @Mock
     private EmbeddingService embeddingService;
 
-    @Mock
-    private ReRankingService reRankingService;
-
     @InjectMocks
     private SearchServiceImpl searchService;
 
@@ -51,7 +46,7 @@ class SearchServiceTest {
         @Test
         void shouldReturnClientsWhenQueryIsValid() {
             String query = "John Doe";
-            Client mockClient = mock(Client.class);
+            ClientSearchResultItem mockClient = mock(ClientSearchResultItem.class);
             ClientSearchResponse johnDoe = new ClientSearchResponse(List.of(mockClient), Collections.emptyList());
             when(clientRepository.search(query))
                 .thenReturn(johnDoe);
@@ -88,13 +83,10 @@ class SearchServiceTest {
         void shouldReturnDocumentsOnSemanticMatch() {
             String query = "address proof";
             float[] vector = new float[]{0.1f, 0.9f};
-            DocumentSearchResult match = new DocumentSearchResult(UUID.randomUUID(), "Utility Bill", "Address info", 0.56);
+            DocumentSearchResultItem match = new DocumentSearchResultItem(UUID.randomUUID(), UUID.randomUUID(), "Utility Bill", 0.56, "Address info", DocumentTaskStatus.PENDING, null);
 
             when(embeddingService.embedQuery(query)).thenReturn(vector);
             when(chunkRepository.findSimilar(eq(vector), anyInt(), any()))
-                .thenReturn(List.of(match));
-
-            when(reRankingService.reRank(query, List.of(match)))
                 .thenReturn(List.of(match));
 
             DocumentSearchResponse response = searchService.findDocument(Optional.of(clientId), query);
@@ -107,13 +99,11 @@ class SearchServiceTest {
         void shouldFilterOutPhoneticNoiseUsingReRanking() {
             String query = "utilise billy";
             float[] vector = new float[]{0.11f, 0.21f};
-            DocumentSearchResult noise = new DocumentSearchResult(UUID.randomUUID(), "Utility Bill", "Content", 0.51);
+            DocumentSearchResultItem noise = new DocumentSearchResultItem(UUID.randomUUID(), UUID.randomUUID(), "Utility Bill", 0.16, "Content", DocumentTaskStatus.PENDING, null);
 
             when(embeddingService.embedQuery(query)).thenReturn(vector);
             when(chunkRepository.findSimilar(eq(vector), anyInt(), any()))
                 .thenReturn(List.of(noise));
-            when(reRankingService.reRank(query, List.of(noise)))
-                .thenReturn(List.of());
 
             DocumentSearchResponse response = searchService.findDocument(Optional.empty(), query);
 
