@@ -5,6 +5,7 @@ import com.nevis.search.exception.DocumentNotFoundException;
 import com.nevis.search.model.Document;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
+import com.nevis.search.service.DocumentSearchResult;
 import com.pgvector.PGvector;
 import dev.langchain4j.data.segment.TextSegment;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.PreparedStatement;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -103,7 +106,7 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
 
 
     @Override
-    public void updateStatus(UUID id, DocumentTaskStatus status) {
+    public void updateStatus(UUID chunkId, DocumentTaskStatus status) {
         String sql = """
             UPDATE document_chunks 
             SET status = :status::task_status
@@ -112,11 +115,11 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
 
         int rowsAffected = jdbcClient.sql(sql)
             .param("status", status.name())
-            .param("id", id)
+            .param("id", chunkId)
             .update();
 
         if (rowsAffected == 0) {
-            throw new ChunkNotFoundException(id);
+            throw new ChunkNotFoundException(chunkId);
         }
     }
 
@@ -140,20 +143,57 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
         }
     }
 
-    public void updateVector(UUID id, float[] vector) {
+    public void insertChunkVector(UUID docId, UUID chunkId, String content, float[] vector) {
         String sql = """
-            UPDATE document_chunks 
-            SET embedding = ?, status = 'READY' 
-            WHERE id = ?
+            INSERT INTO 
+            document_chunk_embeddings 
+            (document_id, chunk_id, content, embedding) 
+            VALUES (?, ?, ?, ?)
             """;
 
-        int rowsAffected = jdbcClient.sql(sql)
-            .params(new PGvector(vector), id)
-            .update();
+        jdbcTemplate.update(sql,
+            docId,
+            chunkId,
+            content,
+            new PGvector(vector)
+        );
+    }
 
-        if (rowsAffected == 0) {
-            throw new ChunkNotFoundException(id);
-        }
+    @Override
+    public List<DocumentSearchResult> findSimilar(float[] vector, int limit, Optional<UUID> clientId) {
+        String vectorStr = Arrays.toString(vector);
+
+        String sql = """
+                 SELECT
+                     ce.content,
+                     1 - (ce.embedding <=> :vector::vector) as score,
+                     d.title,
+                     d.id as doc_id
+                 FROM document_chunk_embeddings ce
+                 JOIN documents d ON ce.document_id = d.id
+                 WHERE
+                 """ +
+                     clientId.map(x -> "d.client_id = :clientId AND ").orElse("") +
+                     """
+                       1 - (ce.embedding <=> :vector::vector) > :threshold
+                     ORDER BY ce.embedding <=> :vector::vector ASC
+                     LIMIT :limit
+                     """;
+
+        var client = jdbcClient.sql(sql)
+            .param("vector", vectorStr)
+            .param("limit", limit)
+            .param("threshold", 0.5);
+
+        clientId.ifPresent(uuid -> client.param("clientId", uuid));
+
+        return client.query((rs, rowNum) -> new DocumentSearchResult(
+                rs.getObject("doc_id", UUID.class),
+                rs.getString("title"),
+                rs.getString("content"),
+                rs.getDouble("score")
+            ))
+            .list();
     }
 
 }

@@ -1,24 +1,18 @@
 package com.nevis.search.service;
 
 import com.nevis.search.exception.EmbeddingException;
-import com.nevis.search.exception.EmbeddingMismatchException;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.repository.DocumentChunkRepository;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.output.Response;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.TransientDataAccessException;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Recover;
-import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -30,49 +24,48 @@ public class EmbeddingServiceImpl implements EmbeddingService {
     private final DocumentService documentService;
     private final DocumentChunkRepository chunkRepository;
     private final EmbeddingModel embeddingModel;
+    private final ChatModel chatModel;
 
-    @Retryable(
-        retryFor = {
-            dev.langchain4j.exception.RetriableException.class,
-            EmbeddingMismatchException.class,
-            TransientDataAccessException.class
-        },
-        maxAttempts = 3,
-        backoff = @Backoff(delay = 2000, multiplier = 2.0)
-    )
+    private static final String SUMMARY_PROMPT_TEMPLATE =
+        """            
+            Role: You are an expert Data Architect for a Global Wealth Management firm. Your goal is to generate a comprehensive metadata tag cloud for any document provided.
+            
+            Task: Analyze the provided text and extract a comma-separated list of meaningful industry terms that are mentioned in document and should be used to tag this file in a CRM.
+            
+            Extraction Logic:
+            
+            Regulatory & Compliance: What does this prove for KYC, AML, or tax purposes? (e.g., Source of Wealth, Tax Residency, Identity Verification).
+            
+            Financial Concepts: What asset classes, instruments, or strategies are mentioned or implied? (e.g., Fixed Income, Alternative Investments, Cost-Basis Reporting).
+            
+            Document Equivalents: What are the industry synonyms for this document type? (e.g., if it's a 1040, include Tax Return, Income Disclosure, Fiscal Filing).
+            
+            Strict Constraints:
+            
+            NO Personal Data: Do not extract actual names, account numbers, or specific dollar amounts.
+            
+            Terms Only: Output only a flat, comma-separated list of professional terms
+            
+            Input Text: %s
+            """;
+
     public void generateForDocument(UUID docId) {
         List<DocumentChunk> pendingChunks = chunkRepository.startProcessing(docId);
+        pendingChunks.forEach(chunk -> {
+            List<TextSegment> segments = getChunkTerms(chunk)
+                .stream()
+                .map(TextSegment::from)
+                .toList();
 
-        if (pendingChunks.isEmpty()) {
-            return;
-        }
+            Response<List<Embedding>> response = embeddingModel.embedAll(segments);
+            List<Embedding> embeddings = response.content();
 
-        List<TextSegment> segments = pendingChunks.stream()
-            .map(chunk -> TextSegment.from(chunk.content()))
-            .toList();
+            Map<String, float[]> embeddingMap = IntStream.range(0, segments.size())
+                .boxed()
+                .collect(Collectors.toMap(i -> segments.get(i).text(), i -> embeddings.get(i).vector()));
 
-        validateSegments(segments, docId);
-
-        Response<List<Embedding>> response = embeddingModel.embedAll(segments);
-        List<Embedding> embeddings = response.content();
-
-        if (embeddings.size() != pendingChunks.size()) {
-            String sampleText = segments.isEmpty() ? "No segments" : segments.get(0).text();
-            String safeSample = sampleText.length() > 30
-                ? sampleText.substring(0, 30) + "..."
-                : sampleText;
-
-            log.error("Mismatch for doc {}: Expected {}, Got {}. Sample text: {}",
-                docId, pendingChunks.size(), embeddings.size(), safeSample);
-
-            throw new EmbeddingMismatchException("Provider returned mismatched count");
-        }
-
-        Map<UUID, float[]> embeddingMap = IntStream.range(0, pendingChunks.size())
-            .boxed()
-            .collect(Collectors.toMap(i -> pendingChunks.get(i).id(), i -> embeddings.get(i).vector()));
-
-        documentService.saveEmbeddings(docId, embeddingMap);
+            documentService.saveEmbeddings(docId, chunk.id(), embeddingMap);
+        });
     }
 
     @Override
@@ -103,32 +96,12 @@ public class EmbeddingServiceImpl implements EmbeddingService {
         }
     }
 
-    private void validateSegments(List<TextSegment> segments, UUID docId) {
-        if (segments == null || segments.isEmpty()) {
-            throw new IllegalArgumentException("No segments found for document: " + docId);
+    private List<String> getChunkTerms(DocumentChunk chunk) {
+        String termsList = chatModel.chat(String.format(SUMMARY_PROMPT_TEMPLATE, chunk.content()));
+        if (termsList.isBlank()) {
+            return Collections.emptyList();
         }
-
-        for (int i = 0; i < segments.size(); i++) {
-            String text = segments.get(i).text();
-
-            if (text == null || text.trim().isEmpty()) {
-                throw new IllegalArgumentException(
-                    String.format("Segment at index %d for doc %s is empty or null.", i, docId)
-                );
-            }
-
-            // 2. Check for "Too Long" segments (Token Limits)
-            if (text.length() > 30000) {
-                log.warn("Segment {} in doc {} is very large ({} chars). This might fail at the AI provider.",
-                    i, docId, text.length());
-            }
-        }
-    }
-
-    @Recover
-    public void recover(Exception e, UUID docId) {
-        log.error("Failed to process document {}. Error: {}", docId, e.getMessage());
-        chunkRepository.markAllDocumentChunksAsFailed(docId, e.getMessage());
+        return Arrays.asList(termsList.split(", "));
     }
 
 }
