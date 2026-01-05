@@ -1,5 +1,6 @@
 package com.nevis.search.service;
 
+import com.nevis.search.event.DocumentIngestedEvent;
 import com.nevis.search.model.Document;
 import com.nevis.search.model.DocumentTaskStatus;
 import com.nevis.search.repository.DocumentChunkRepository;
@@ -9,6 +10,7 @@ import dev.langchain4j.data.document.splitter.DocumentSplitters;
 import dev.langchain4j.data.segment.TextSegment;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,22 +26,24 @@ import static java.util.Collections.emptyList;
 @Slf4j
 public class DocumentServiceImpl implements DocumentService {
 
-    private final DocumentRepository repository;
+    private final DocumentRepository documentRepository;
     private final DocumentChunkRepository chunkRepository;
     private final DocumentSplitter splitter = DocumentSplitters.recursive(3000, 300);
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public Document ingestDocument(String title, String content, UUID clientId) {
         Document doc = new Document(null, clientId, title, content, null, DocumentTaskStatus.PENDING, null, null);
 
-        Document savedDoc = repository.save(doc);
+        Document savedDoc = documentRepository.save(doc);
 
         List<TextSegment> segments = getSplittedChunks(content);
         if (segments.isEmpty()) {
-            repository.updateStatus(savedDoc.id(), DocumentTaskStatus.READY);
+            documentRepository.updateStatus(savedDoc.id(), DocumentTaskStatus.READY);
         } else {
             chunkRepository.saveChunks(savedDoc.id(), segments);
-            repository.updateStatus(savedDoc.id(), DocumentTaskStatus.PROCESSING);
+            documentRepository.updateStatus(savedDoc.id(), DocumentTaskStatus.PROCESSING);
+            eventPublisher.publishEvent(new DocumentIngestedEvent(savedDoc.id()));
         }
 
         return savedDoc;
@@ -70,7 +74,7 @@ public class DocumentServiceImpl implements DocumentService {
 
         if (chunkRepository.areAllChunksProcessed(docId)) {
             log.info("Doc {}: Updating status to Ready", docId);
-            repository.updateStatus(docId, DocumentTaskStatus.READY);
+            documentRepository.updateStatus(docId, DocumentTaskStatus.READY);
         }
     }
 

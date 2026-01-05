@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Map;
@@ -23,7 +24,8 @@ class DocumentServiceTest {
 
     private final DocumentRepository repository = Mockito.mock(DocumentRepository.class);
     private final DocumentChunkRepository chunkRepository = Mockito.mock(DocumentChunkRepository.class);
-    private final DocumentService documentService = new DocumentServiceImpl(repository, chunkRepository);
+    private final ApplicationEventPublisher eventPublisher = Mockito.mock(ApplicationEventPublisher.class);
+    private final DocumentService documentService = new DocumentServiceImpl(repository, chunkRepository, eventPublisher);
 
     @Nested
     @DisplayName("Split document to chunks")
