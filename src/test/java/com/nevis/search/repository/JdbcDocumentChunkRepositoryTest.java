@@ -19,11 +19,15 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StreamUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -47,6 +51,11 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    private TransactionTemplate transactionTemplate;
 
     @Test
     @DisplayName("Constraint: Fail when client_id does not exist (FK)")
@@ -272,7 +281,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         void shouldUpdateEmbeddingStatusWithError() {
             String errorMessage = "API Quota exceeded";
 
-            chunkRepository.markAllDocumentChunksAsFailed(documentId, errorMessage);
+            chunkRepository.markAsFailed(chunkId, errorMessage);
 
             Map<String, Object> result = jdbcClient.sql("SELECT status::text, error_message FROM document_chunks WHERE id = ?")
                 .param(chunkId)
@@ -314,6 +323,8 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
 
         @BeforeEach
         void setUp() {
+            transactionTemplate = new TransactionTemplate(transactionManager);
+
             jdbcClient.sql("delete from clients").update();
             jdbcClient.sql("delete from documents").update();
             jdbcClient.sql("delete from document_chunks").update();
@@ -366,7 +377,69 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
                 .update();
         }
 
+        @Test
+        @DisplayName("Should claim only one pending chunk and change its status")
+        void shouldClaimOneChunk() {
+            insertChunk(docId, DocumentTaskStatus.PENDING);
+            insertChunk(docId, DocumentTaskStatus.PENDING);
+
+            Optional<DocumentChunk> claimed = chunkRepository.claimNextPendingChunk(docId);
+
+            assertThat(claimed).isPresent();
+            assertThat(claimed.get().status()).isEqualTo(DocumentTaskStatus.PROCESSING);
+
+            int remaining = jdbcClient.sql("SELECT count(*) FROM document_chunks WHERE status = 'PENDING'")
+                .query(Integer.class).single();
+            assertThat(remaining).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("Should count pending chunks correctly")
+        void shouldCountPendingChunks() {
+            insertChunk(docId, DocumentTaskStatus.PENDING);
+            insertChunk(docId, DocumentTaskStatus.PENDING);
+            insertChunk(docId, DocumentTaskStatus.READY);
+
+            int count = chunkRepository.countPendingByDocumentId(docId);
+
+            assertThat(count).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("Should skip locked chunks when concurrent workers are active")
+        void shouldSkipLockedChunks() throws Exception {
+            UUID chunk1 = UUID.randomUUID();
+            UUID chunk2 = UUID.randomUUID();
+            insertChunkWithId(chunk1, docId, DocumentTaskStatus.PENDING);
+            insertChunkWithId(chunk2, docId, DocumentTaskStatus.PENDING);
+
+            CountDownLatch latch = new CountDownLatch(1);
+
+            CompletableFuture<Optional<DocumentChunk>> thread1Claim = CompletableFuture.supplyAsync(() ->
+                transactionTemplate.execute(status -> {
+                    Optional<DocumentChunk> claim = chunkRepository.claimNextPendingChunk(docId);
+                    latch.countDown();
+                    try { Thread.sleep(1000); } catch (InterruptedException e) {}
+                    return claim;
+                })
+            );
+
+            latch.await();
+            Optional<DocumentChunk> thread2Claim = chunkRepository.claimNextPendingChunk(docId);
+
+            assertThat(thread1Claim.get()).isPresent();
+            assertThat(thread2Claim).isPresent();
+            assertThat(thread1Claim.get().get().id()).isNotEqualTo(thread2Claim.get().id());
+        }
+
+        private void insertChunkWithId(UUID id, UUID documentId, DocumentTaskStatus status) {
+            jdbcClient.sql("INSERT INTO document_chunks (id, document_id, content, status) VALUES (?, ?, 'Content', ?::task_status)")
+                .params(id, documentId, status.name())
+                .update();
+        }
+
     }
+
 
     @Nested
     @DisplayName("Search document chunk by vector")

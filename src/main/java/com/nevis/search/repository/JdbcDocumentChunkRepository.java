@@ -2,7 +2,6 @@ package com.nevis.search.repository;
 
 import com.nevis.search.exception.ChunkNotFoundException;
 import com.nevis.search.exception.DocumentNotFoundException;
-import com.nevis.search.model.Document;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
 import com.nevis.search.service.DocumentSearchResult;
@@ -71,21 +70,36 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
 
     @Override
     @Transactional
-    public List<DocumentChunk> startProcessing(UUID docId) {
+    public Optional<DocumentChunk> claimNextPendingChunk(UUID docId) {
         String sql = """
-            UPDATE document_chunks
-            SET status = 'PROCESSING'::task_status
+        UPDATE document_chunks 
+        SET status = 'PROCESSING'::task_status, updated_at = NOW()
+        WHERE id = (
+            SELECT id FROM document_chunks 
+            WHERE document_id = :docId AND status = 'PENDING'::task_status
+            ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED
+        )
+        RETURNING *
+        """;
+
+        return jdbcClient.sql(sql)
+            .param("docId", docId)
+            .query(DocumentChunk.class)
+            .optional();
+    }
+
+    public int countPendingByDocumentId(UUID docId) {
+        String sql = """
+            SELECT COUNT(*) 
+            FROM document_chunks 
             WHERE document_id = :docId 
               AND status = 'PENDING'::task_status
-            RETURNING id, document_id, content, chunk_summary, 
-                      status, error_message, 
-                      attempts, created_at, updated_at
             """;
 
         return jdbcClient.sql(sql)
             .param("docId", docId)
-            .query(documentChunkMapper)
-            .list();
+            .query(Integer.class)
+            .single();
     }
 
     public boolean areAllChunksProcessed(UUID docId) {
@@ -124,12 +138,12 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
     }
 
     @Override
-    public void markAllDocumentChunksAsFailed(UUID documentId, String error) {
+    public void markAsFailed(UUID documentId, String error) {
         String sql = """
             UPDATE document_chunks 
             SET status = :status::task_status,
                 error_message = :error
-            WHERE document_id = :id
+            WHERE id = :id
             """;
 
         int rowsAffected = jdbcClient.sql(sql)

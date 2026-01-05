@@ -11,10 +11,11 @@ import java.util.UUID;
 
 public interface DocumentChunkRepository {
     void saveChunks(UUID docId, List<TextSegment> segments);
-    List<DocumentChunk> startProcessing(UUID id);
+    int countPendingByDocumentId(UUID docId);
+    Optional<DocumentChunk> claimNextPendingChunk(UUID docId);
     boolean areAllChunksProcessed(UUID docId);
     void updateStatus(UUID chunkId, DocumentTaskStatus status);
-    void markAllDocumentChunksAsFailed(UUID id, String error);
+    void markAsFailed(UUID id, String error);
     void insertChunkVector(UUID docId, UUID chunkId, String content, float[] vector);
     List<DocumentSearchResult> findSimilar(float[] vector, int limit, Optional<UUID> clientId);
 }
