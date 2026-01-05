@@ -159,4 +159,41 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
         );
     }
 
+    @Override
+    public List<DocumentSearchResult> findSimilar(float[] vector, int limit, Optional<UUID> clientId) {
+        String vectorStr = Arrays.toString(vector);
+
+        String sql = """
+                 SELECT
+                     ce.content,
+                     1 - (ce.embedding <=> :vector::vector) as score,
+                     d.title,
+                     d.id as doc_id
+                 FROM document_chunk_embeddings ce
+                 JOIN documents d ON ce.document_id = d.id
+                 WHERE
+                 """ +
+                     clientId.map(x -> "d.client_id = :clientId AND ").orElse("") +
+                     """
+                       1 - (ce.embedding <=> :vector::vector) > :threshold
+                     ORDER BY ce.embedding <=> :vector::vector ASC
+                     LIMIT :limit
+                     """;
+
+        var client = jdbcClient.sql(sql)
+            .param("vector", vectorStr)
+            .param("limit", limit)
+            .param("threshold", 0.5);
+
+        clientId.ifPresent(uuid -> client.param("clientId", uuid));
+
+        return client.query((rs, rowNum) -> new DocumentSearchResult(
+                rs.getObject("doc_id", UUID.class),
+                rs.getString("title"),
+                rs.getString("content"),
+                rs.getDouble("score")
+            ))
+            .list();
+    }
+
 }

@@ -16,4 +16,5 @@ public interface DocumentChunkRepository {
     void updateStatus(UUID chunkId, DocumentTaskStatus status);
     void markAllDocumentChunksAsFailed(UUID id, String error);
     void insertChunkVector(UUID docId, UUID chunkId, String content, float[] vector);
+    List<DocumentSearchResult> findSimilar(float[] vector, int limit, Optional<UUID> clientId);
 }

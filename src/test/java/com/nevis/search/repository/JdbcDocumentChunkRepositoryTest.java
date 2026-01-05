@@ -45,6 +45,9 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
     @Autowired
     private JdbcClient jdbcClient;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @Test
     @DisplayName("Constraint: Fail when client_id does not exist (FK)")
     void shouldFailWithNonExistentClientId() {
@@ -184,46 +187,33 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         }
 
         @Test
-        @DisplayName("Should update vector and set status to READY")
+        @DisplayName("Should insert chunk vector")
         void shouldUpdateEmbeddingChunkVector() {
             Client client = clientRepository.save(new Client(null, "Name2", "Last2", "def@test4.com", null, List.of(), null, null));
+            UUID docId = UUID.randomUUID();
+            insertTestDocument(docId, client.id());
 
-            UUID doc1Id = UUID.randomUUID();
-            UUID doc2Id = UUID.randomUUID();
-            insertTestDocument(doc1Id, client.id());
-            insertTestDocument(doc2Id, client.id());
-
-            String content = "First Pending";
-            UUID existingChunkId = insertChunk(doc1Id, content, "PENDING", 1);
+            String content = "Test content for embedding";
+            UUID existingChunkId = insertChunk(docId, content, "PENDING", 0);
 
             float[] vector = new float[768];
             vector[0] = 0.1f;
             vector[767] = 0.9f;
 
-            chunkRepository.insertChunkVector(doc1Id, existingChunkId, content, vector);
+            chunkRepository.insertChunkVector(docId, existingChunkId, content, vector);
 
-            Map<String, Object> result = jdbcClient.sql("SELECT status, embedding FROM document_chunks WHERE id = ?")
+            Map<String, Object> embeddingResult = jdbcClient.sql("""
+            SELECT embedding 
+            FROM document_chunk_embeddings 
+            WHERE chunk_id = ?
+            """)
                 .param(existingChunkId)
                 .query()
                 .singleRow();
 
-            assertThat(result.get("status")).isEqualTo("READY");
-            assertThat(result.get("embedding")).isNotNull();
+            assertThat(embeddingResult.get("embedding")).isNotNull();
         }
-
-        @Test
-        @DisplayName("Should throw exception when updating vector of non-existent chunk")
-        void shouldThrowExceptionWhenChunkNotFoundForVector() {
-            UUID randomId = UUID.randomUUID();
-
-            float[] vector = new float[768];
-            vector[0] = 0.1f;
-            vector[1] = 0.2f;
-
-            assertThatThrownBy(() -> chunkRepository.insertChunkVector(randomId, randomId, "some", vector))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Chunk not found: " + randomId);
-        }
+        
     }
 
     @Nested
@@ -377,5 +367,103 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         }
 
     }
+
+    @Nested
+    @DisplayName("Search document chunk by vector")
+    class DocumentChunkVectorSearch {
+        @Test
+        @DisplayName("Should find similar chunk using vectors from resource files (E2E Vector Match)")
+        void shouldFindSimilarChunkUsingRealVectors() {
+            float[] docVector = loadVector("vectors/proof_of_address/vector");
+            float[] addressProof = loadVector("vectors/address_proof_query/vector");
+            float[] utiliseBilly = loadVector("vectors/utilize_billy/vector");
+            float[] utilityBill = loadVector("vectors/utility_bill/vector");
+            float[] aSymbol = loadVector("vectors/a_symbol/vector");
+            float[] gibberish = loadVector("vectors/gibberish/vector");
+
+            UUID clientId = UUID.randomUUID();
+            insertTestClient(clientId);
+
+            UUID docId = UUID.randomUUID();
+            insertTestDocument(docId, clientId, "Utility Bill - Jan 2026");
+
+            String chunkContent = "Address: 742 Evergreen Terrace, Springfield. Utility usage details...";
+            UUID chunkId = insertTestChunk(docId, chunkContent);
+
+            insertTestEmbedding(docId, chunkId, chunkContent, docVector);
+
+            assertQueryScore(docVector, chunkContent, 1.0, 1.0);
+            assertQueryScore(addressProof, chunkContent, 0.8, 1.0);
+            assertQueryScore(utiliseBilly, chunkContent, 0.5, 0.6);
+            assertQueryScore(aSymbol, chunkContent, 0.5, 0.6);
+            assertQueryScore(utilityBill, chunkContent, 0.5, 0.7);
+            assertNoResult(gibberish);
+        }
+
+        private void assertNoResult(float[] queryVector) {
+            List<DocumentSearchResult> results = chunkRepository.findSimilar(queryVector, 1, Optional.empty());
+
+            assertThat(results).isEmpty();
+        }
+
+        private void assertQueryScore(float[] queryVector, String chunkContent, double scoreLower, double scoreUpper) {
+            List<DocumentSearchResult> results = chunkRepository.findSimilar(queryVector, 1, Optional.empty());
+
+            assertThat(results).isNotEmpty();
+            DocumentSearchResult topResult = results.get(0);
+
+            assertThat(topResult.title()).isEqualTo("Utility Bill - Jan 2026");
+            assertThat(topResult.content()).isEqualTo(chunkContent);
+
+            assertThat(topResult.score()).isGreaterThanOrEqualTo(scoreLower);
+            assertThat(topResult.score()).isLessThanOrEqualTo(scoreUpper);
+        }
+
+        private void insertTestClient(UUID id) {
+            jdbcTemplate.update(
+                "INSERT INTO clients (id, first_name, last_name, email) VALUES (?, 'Homer', 'Simpson', ?)",
+                id, id + "@springfield.com"
+            );
+        }
+
+        private void insertTestDocument(UUID id, UUID clientId, String title) {
+            jdbcTemplate.update(
+                "INSERT INTO documents (id, client_id, title, content, status) VALUES (?, ?, ?, 'Full text', 'READY')",
+                id, clientId, title
+            );
+        }
+
+        private UUID insertTestChunk(UUID docId, String content) {
+            UUID chunkId = UUID.randomUUID();
+            jdbcTemplate.update(
+                "INSERT INTO document_chunks (id, document_id, content, status) VALUES (?, ?, ?, 'READY')",
+                chunkId, docId, content
+            );
+            return chunkId;
+        }
+
+        private void insertTestEmbedding(UUID docId, UUID chunkId, String content, float[] vector) {
+            jdbcTemplate.update(
+                "INSERT INTO document_chunk_embeddings (document_id, chunk_id, content, embedding) VALUES (?, ?, ?, ?::vector)",
+                docId, chunkId, content, java.util.Arrays.toString(vector)
+            );
+        }
+
+        @SneakyThrows
+        private float[] loadVector(String path) {
+            try (var inputStream = new ClassPathResource(path).getInputStream()) {
+                String content = StreamUtils.copyToString(inputStream, StandardCharsets.UTF_8);
+                String clean = content.replace("[", "").replace("]", "").trim();
+                String[] parts = clean.split(",\\s*");
+
+                float[] vector = new float[parts.length];
+                for (int i = 0; i < parts.length; i++) {
+                    vector[i] = Float.parseFloat(parts[i]);
+                }
+                return vector;
+            }
+        }
+    }
+
 
 }

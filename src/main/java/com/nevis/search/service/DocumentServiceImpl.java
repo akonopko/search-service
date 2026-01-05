@@ -74,4 +74,8 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
+    public List<DocumentSearchResult> search(float[] queryVector, int limit, Optional<UUID> clientId) {
+        return chunkRepository.findSimilar(queryVector, limit, clientId);
+    }
+
 }
