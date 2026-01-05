@@ -27,5 +27,11 @@ CREATE TABLE IF NOT EXISTS document_chunk_embeddings (
 
 CREATE INDEX ON document_chunk_embeddings USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX ON document_chunks (document_id);
-CREATE INDEX ON document_chunk_embeddings (document_id);
-CREATE INDEX ON document_chunk_embeddings (chunk_id);
+
+CREATE INDEX idx_chunks_processing_queue ON document_chunks (document_id, status, attempts)
+WHERE status = 'PENDING';
+
+CREATE TRIGGER update_chunks_updated_at
+    BEFORE UPDATE ON document_chunks
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();

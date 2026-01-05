@@ -15,11 +15,12 @@ CREATE TABLE clients (
 CREATE INDEX idx_clients_full_name_lower ON clients (LOWER(last_name), LOWER(first_name));
 
 CREATE INDEX idx_clients_search_trgm ON clients USING GIN (
-    LOWER(first_name || ' ' || last_name || ' ' || email) gin_trgm_ops
-);
-
-CREATE INDEX idx_clients_description_trgm ON clients USING GIN (
-    LOWER(COALESCE(description, '')) gin_trgm_ops
+    LOWER(
+        COALESCE(first_name, '') || ' ' ||
+        COALESCE(last_name, '') || ' ' ||
+        COALESCE(email, '') || ' ' ||
+        COALESCE(description, '')
+    ) gin_trgm_ops
 );
 
 ALTER TABLE clients ADD CONSTRAINT email_must_be_lower CHECK (email = LOWER(email));

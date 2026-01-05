@@ -68,10 +68,9 @@ public class JdbcClientRepository implements ClientRepository {
             return new ClientSearchResponse(List.of(), List.of());
         }
 
-        jdbcClient.sql(String.format(
-            "SET LOCAL pg_trgm.strict_word_similarity_threshold = %.2f",
-            searchProperties.threshold()
-        )).update();
+        jdbcClient
+            .sql("SET LOCAL pg_trgm.strict_word_similarity_threshold = " + searchProperties.threshold())
+            .update();
 
         String cleanQuery = query.trim().toLowerCase();
 
