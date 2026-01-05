@@ -1,157 +1,178 @@
 package com.nevis.search.service;
 
 import com.nevis.search.exception.EmbeddingException;
+import com.nevis.search.infra.RateLimiter;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
 import com.nevis.search.repository.DocumentChunkRepository;
-import com.nevis.search.repository.DocumentRepository;
 import dev.langchain4j.data.embedding.Embedding;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.output.Response;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.retry.annotation.EnableRetry;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.IntStream;
+import java.util.function.Supplier;
 
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
-import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyMap;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-@SpringBootTest(classes = {EmbeddingServiceImpl.class})
-@EnableRetry
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class EmbeddingServiceTest {
 
-    @Autowired
-    private EmbeddingService embeddingService;
-
-    @MockitoBean
-    private DocumentRepository repository;
-
-    @MockitoBean
-    private DocumentChunkRepository chunkRepository;
-
-    @MockitoBean
+    @Mock
     private DocumentService documentService;
-    @MockitoBean
+    @Mock
+    private DocumentChunkRepository chunkRepository;
+    @Mock
     private EmbeddingModel embeddingModel;
+    @Mock
+    private ChatModel chatModel;
+    @Mock
+    private RateLimiter chatLimiter;
+    @Mock
+    private RateLimiter embeddingLimiter;
 
-    private final UUID docId = UUID.randomUUID();
+    private EmbeddingServiceImpl embeddingService;
 
-    @Test
-    @DisplayName("Should retry 3 times and then succeed")
-    void shouldRetryAndEventuallySucceed() {
-        setupPendingChunks(1);
-
-        when(embeddingModel.embedAll(anyList()))
-            .thenThrow(new dev.langchain4j.exception.RetriableException("API Timeout"))
-            .thenReturn(Response.from(List.of(Embedding.from(new float[1536]))));
-
-        embeddingService.generateForDocument(docId);
-
-        verify(embeddingModel, times(2)).embedAll(anyList()); // 1 провал + 1 успех
-        verify(documentService).saveEmbeddings(eq(docId), anyMap());
-    }
-
-    @Test
-    @DisplayName("Should recover (set FAILED) after 3 failed attempts")
-    void shouldRecoverAfterExhaustingRetries() {
-        setupPendingChunks(1);
-
-        when(embeddingModel.embedAll(anyList()))
-            .thenThrow(new dev.langchain4j.exception.RetriableException("Gemini is down"));
-
-        embeddingService.generateForDocument(docId);
-
-        verify(embeddingModel, times(3)).embedAll(anyList());
-        verify(chunkRepository).markAllDocumentChunksAsFailed(eq(docId), anyString());
-    }
-
-    @Test
-    @DisplayName("Should retry on Mismatch and succeed on second attempt")
-    void shouldRetryOnMismatch() {
-        UUID chunkId = UUID.randomUUID();
-        DocumentChunk chunk = new DocumentChunk(chunkId, docId, "text", null,
-            DocumentTaskStatus.PENDING, null, 0, null, null);
-
-        when(chunkRepository.startProcessing(docId))
-            .thenReturn(List.of(chunk));
-
-        when(embeddingModel.embedAll(anyList()))
-            .thenReturn(Response.from(List.of()))
-            .thenReturn(Response.from(List.of(Embedding.from(new float[1536]))));
-
-        embeddingService.generateForDocument(docId);
-
-        verify(embeddingModel, times(2)).embedAll(anyList());
-        verify(documentService).saveEmbeddings(eq(docId), anyMap());
-    }
-
-    @Test
-    @DisplayName("Should not retry on non-retriable exceptions and call recover immediately")
-    void shouldNotRetryOnFatalErrors() {
-        setupPendingChunks(1);
-        when(embeddingModel.embedAll(anyList()))
-            .thenThrow(new IllegalArgumentException("Fatal developer error"));
-
-        embeddingService.generateForDocument(docId);
-        verify(embeddingModel, times(1)).embedAll(anyList());
-
-        verify(chunkRepository).markAllDocumentChunksAsFailed(
-            eq(docId),
-            contains("Fatal developer error")
+    @BeforeEach
+    void setUp() {
+        embeddingService = new EmbeddingServiceImpl(
+            chatLimiter,
+            embeddingLimiter,
+            documentService,
+            chunkRepository,
+            embeddingModel,
+            chatModel
         );
-    }
 
-    @Test
-    @DisplayName("Should do nothing if no pending chunks found")
-    void shouldHandleNoPendingChunks() {
-        when(chunkRepository.startProcessing(docId))
-            .thenReturn(List.of());
+        when(chatLimiter.execute(anyString(), anyInt(), any()))
+            .thenAnswer(inv -> ((Supplier<?>) inv.getArgument(2)).get());
 
-        embeddingService.generateForDocument(docId);
-
-        verifyNoInteractions(embeddingModel);
-        verifyNoInteractions(documentService);
-    }
-
-
-    private void setupPendingChunks(int count) {
-        List<DocumentChunk> chunks = IntStream.range(0, count)
-            .mapToObj(i -> new DocumentChunk(UUID.randomUUID(), docId, "content " + i, null,
-                DocumentTaskStatus.PENDING, null, 0, null, null))
-            .toList();
-        when(chunkRepository.startProcessing(docId)).thenReturn(chunks);
+        when(embeddingLimiter.execute(anyString(), anyInt(), any()))
+            .thenAnswer(inv -> ((Supplier<?>) inv.getArgument(2)).get());
     }
 
     @Nested
-    @DisplayName("embedQuery tests")
+    @DisplayName("generateForDocument Tests")
+    class GenerateForDocumentTests {
+
+        @Test
+        @DisplayName("Should successfully process all pending chunks")
+        void shouldProcessAllPendingChunks() {
+            UUID docId = UUID.randomUUID();
+            DocumentChunk chunk = createChunk(docId, "Sample content");
+
+            when(chunkRepository.countPendingByDocumentId(docId)).thenReturn(1);
+            when(chunkRepository.claimNextPendingChunk(docId)).thenReturn(Optional.of(chunk));
+            when(chatModel.chat(anyString())).thenReturn("Tax, KYC, AML");
+
+            float[] vector = new float[]{0.1f, 0.2f};
+            Response<List<Embedding>> mockResponse = Response.from(List.of(
+                new Embedding(vector), new Embedding(vector), new Embedding(vector)
+            ));
+            when(embeddingModel.embedAll(anyList())).thenReturn(mockResponse);
+
+            embeddingService.generateForDocument(docId);
+
+            verify(documentService).saveEmbeddings(eq(docId), eq(chunk.id()), anyMap());
+            verify(chunkRepository, never()).markAsFailed(any(), any());
+        }
+
+        @Test
+        @DisplayName("Should handle empty terms from LLM by marking chunk as ready")
+        void shouldHandleEmptyTerms() {
+            UUID docId = UUID.randomUUID();
+            DocumentChunk chunk = createChunk(docId, "Content");
+
+            when(chunkRepository.countPendingByDocumentId(docId)).thenReturn(1);
+            when(chunkRepository.claimNextPendingChunk(docId)).thenReturn(Optional.of(chunk));
+            when(chatModel.chat(anyString())).thenReturn("");
+
+            embeddingService.generateForDocument(docId);
+
+            verify(chunkRepository).updateStatus(chunk.id(), DocumentTaskStatus.READY);
+            verify(embeddingModel, never()).embedAll(anyList());
+        }
+
+        @Test
+        @DisplayName("Should mark chunk as failed when an exception occurs")
+        void shouldMarkAsFailedOnException() {
+            UUID docId = UUID.randomUUID();
+            DocumentChunk chunk = createChunk(docId, "Error content");
+
+            when(chunkRepository.countPendingByDocumentId(docId)).thenReturn(1);
+            when(chunkRepository.claimNextPendingChunk(docId)).thenReturn(Optional.of(chunk));
+            when(chatModel.chat(anyString())).thenThrow(new RuntimeException("API Down"));
+
+            embeddingService.generateForDocument(docId);
+
+            verify(chunkRepository).markAsFailed(eq(chunk.id()), contains("API Down"));
+        }
+
+        @Test
+        @DisplayName("Should do nothing if no pending chunks found")
+        void shouldHandleNoPendingChunks() {
+            UUID docId = UUID.randomUUID();
+            when(chunkRepository.countPendingByDocumentId(docId)).thenReturn(0);
+
+            embeddingService.generateForDocument(docId);
+
+            verify(chunkRepository, never()).claimNextPendingChunk(any());
+            verifyNoInteractions(chatModel, embeddingModel, documentService);
+        }
+
+        @Test
+        @DisplayName("Should respect rate limits with correct token estimates")
+        void shouldRespectRateLimits() {
+            UUID docId = UUID.randomUUID();
+            DocumentChunk chunk = createChunk(docId, "Test content");
+            String terms = "Term1, Term2"; // 12 characters
+
+            when(chunkRepository.countPendingByDocumentId(docId)).thenReturn(1);
+            when(chunkRepository.claimNextPendingChunk(docId)).thenReturn(Optional.of(chunk));
+            when(chatModel.chat(anyString())).thenReturn(terms);
+            when(embeddingModel.embedAll(anyList())).thenReturn(Response.from(List.of(new Embedding(new float[0]), new Embedding(new float[0]))));
+
+            embeddingService.generateForDocument(docId);
+
+            verify(chatLimiter).execute(eq(EmbeddingServiceImpl.CHAT_LIMIT), eq(1), any());
+            verify(embeddingLimiter).execute(eq(EmbeddingServiceImpl.EMBEDDING_LIMIT), anyInt(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("embedQuery Tests")
     class EmbedQueryTests {
 
         @Test
         @DisplayName("Should return vector when query is valid")
         void shouldReturnVectorForValidQuery() {
-            String query = "Valid Search Query";
-            float[] expectedVector = new float[1536];
-            expectedVector[0] = 0.5f;
+            String input = "  What is KYC?  ";
+            float[] expectedVector = new float[]{0.5f, 0.5f};
+            when(embeddingModel.embed(anyString())).thenReturn(Response.from(new Embedding(expectedVector)));
 
-            when(embeddingModel.embed(query.toLowerCase())).thenReturn(Response.from(Embedding.from(expectedVector)));
-
-            float[] result = embeddingService.embedQuery(query);
+            float[] result = embeddingService.embedQuery(input);
 
             assertThat(result).isEqualTo(expectedVector);
-            verify(embeddingModel).embed(query.toLowerCase());
+            verify(embeddingModel).embed("what is kyc?");
         }
 
         @ParameterizedTest
@@ -165,41 +186,34 @@ class EmbeddingServiceTest {
         }
 
         @Test
-        @DisplayName("Should truncate query if it exceeds 1000 characters")
+        @DisplayName("Should truncate query if too long")
         void shouldTruncateLongQuery() {
             String longQuery = "a".repeat(1100);
-            String expectedTruncatedQuery = "a".repeat(1000);
-            float[] mockVector = new float[1536];
+            when(embeddingModel.embed(anyString())).thenReturn(Response.from(new Embedding(new float[]{0.1f})));
 
-            when(embeddingModel.embed(expectedTruncatedQuery)).thenReturn(Response.from(Embedding.from(mockVector)));
+            embeddingService.embedQuery(longQuery);
 
-            float[] result = embeddingService.embedQuery(longQuery);
-
-            assertThat(result).isEqualTo(mockVector);
-            verify(embeddingModel).embed(expectedTruncatedQuery);
-            verify(embeddingModel, never()).embed(longQuery);
+            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+            verify(embeddingModel).embed(captor.capture());
+            assertThat(captor.getValue()).hasSize(1000);
         }
 
         @Test
-        @DisplayName("Should throw EmbeddingException if model returns empty vector")
+        @DisplayName("Should throw EmbeddingException when model returns empty vector")
         void shouldThrowExceptionWhenModelReturnsEmptyVector() {
-            String query = "some query";
-            // Mocking a response with a null or empty vector (depends on how the model behaves)
-            when(embeddingModel.embed(anyString())).thenReturn(Response.from(Embedding.from(new float[0])));
+            when(embeddingModel.embed(anyString())).thenReturn(Response.from(new Embedding(new float[0])));
 
-            assertThatThrownBy(() -> embeddingService.embedQuery(query))
-                .isInstanceOf(EmbeddingException.class)
-                .hasMessageContaining("Error during query vectorization");
+            assertThatThrownBy(() -> embeddingService.embedQuery("test"))
+                .isInstanceOf(EmbeddingException.class);
         }
 
         @Test
         @DisplayName("Should throw EmbeddingException when model call fails")
         void shouldWrapExceptionOnModelFailure() {
-            String query = "failing query";
             when(embeddingModel.embed(anyString())).thenThrow(new RuntimeException("API Down"));
 
-            assertThatThrownBy(() -> embeddingService.embedQuery(query))
-                .isInstanceOf(RuntimeException.class) // Adjust if EmbeddingException is a specific type
+            assertThatThrownBy(() -> embeddingService.embedQuery("test"))
+                .isInstanceOf(EmbeddingException.class)
                 .hasMessageContaining("Error during query vectorization");
         }
 
@@ -208,13 +222,15 @@ class EmbeddingServiceTest {
         void shouldSanitizeInput() {
             String query = "  UPPERCASE query  ";
             String sanitized = "uppercase query";
-            float[] mockVector = new float[1536];
-
-            when(embeddingModel.embed(sanitized)).thenReturn(Response.from(Embedding.from(mockVector)));
+            when(embeddingModel.embed(sanitized)).thenReturn(Response.from(new Embedding(new float[1])));
 
             embeddingService.embedQuery(query);
 
             verify(embeddingModel).embed(sanitized);
         }
+    }
+
+    private DocumentChunk createChunk(UUID docId, String content) {
+        return new DocumentChunk(UUID.randomUUID(), docId, content, null, DocumentTaskStatus.PENDING, null, 0, null, null);
     }
 }
