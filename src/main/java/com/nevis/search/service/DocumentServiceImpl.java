@@ -57,8 +57,6 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
 
-
-
     @Override
     @Transactional
     public DocumentResponse ingestDocument(String title, String content, UUID clientId) {
@@ -72,23 +70,52 @@ public class DocumentServiceImpl implements DocumentService {
             null,
             DocumentTaskStatus.PENDING,
             null,
+            0,
+            DocumentTaskStatus.PENDING,
+            null,
             null
         );
 
         Document savedDoc = documentRepository.save(doc);
 
         List<TextSegment> segments = getSplittedChunks(content);
+
         if (segments.isEmpty()) {
             documentRepository.updateStatus(savedDoc.id(), DocumentTaskStatus.READY);
-            savedDoc = new Document(savedDoc.id(), clientId, title, content, null, DocumentTaskStatus.READY, savedDoc.createdAt(), savedDoc.updatedAt());
+
+            savedDoc = new Document(
+                savedDoc.id(),
+                savedDoc.clientId(),
+                savedDoc.title(),
+                savedDoc.content(),
+                savedDoc.summary(),
+                savedDoc.summaryStatus(),
+                savedDoc.summaryErrorMessage(),
+                savedDoc.summaryAttempts(),
+                DocumentTaskStatus.READY,
+                savedDoc.createdAt(),
+                savedDoc.updatedAt()
+            );
         } else {
             chunkRepository.saveChunks(savedDoc.id(), segments);
             documentRepository.updateStatus(savedDoc.id(), DocumentTaskStatus.PROCESSING);
 
             eventPublisher.publishEvent(new DocumentIngestedEvent(savedDoc.id()));
-            savedDoc = new Document(savedDoc.id(), clientId, title, content, null, DocumentTaskStatus.PROCESSING, savedDoc.createdAt(), savedDoc.updatedAt());
-        }
 
+            savedDoc = new Document(
+                savedDoc.id(),
+                savedDoc.clientId(),
+                savedDoc.title(),
+                savedDoc.content(),
+                savedDoc.summary(),
+                savedDoc.summaryStatus(),
+                savedDoc.summaryErrorMessage(),
+                savedDoc.summaryAttempts(),
+                DocumentTaskStatus.PROCESSING,
+                savedDoc.createdAt(),
+                savedDoc.updatedAt()
+            );
+        }
         return mapToResponse(savedDoc);
     }
 
@@ -99,6 +126,7 @@ public class DocumentServiceImpl implements DocumentService {
             doc.title(),
             doc.content(),
             doc.summary(),
+            doc.summaryStatus(),
             doc.status(),
             doc.createdAt()
         );
@@ -120,7 +148,7 @@ public class DocumentServiceImpl implements DocumentService {
             return;
         }
 
-        log.info("Doc {}: Updating {} chunk embeddings in database", docId, embeddingMap.size());
+        log.info("Doc {}: Inserting {} chunk embeddings in database", docId, embeddingMap.size());
 
         embeddingMap.forEach((term, vector) ->
             chunkRepository.insertChunkVector(docId, chunkId, term, vector));

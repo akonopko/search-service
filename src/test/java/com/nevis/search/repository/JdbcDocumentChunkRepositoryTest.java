@@ -59,7 +59,10 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
     @Test
     @DisplayName("Constraint: Fail when client_id does not exist (FK)")
     void shouldFailWithNonExistentClientId() {
-        Document orphan = new Document(null, UUID.randomUUID(), "Title", "Content", null, DocumentTaskStatus.PENDING, null, null);
+        Document orphan = new Document(
+            null, UUID.randomUUID(), "Title", "Content", null,
+            DocumentTaskStatus.PENDING, null, 0, DocumentTaskStatus.PENDING, null, null
+        );
         assertThrows(DataIntegrityViolationException.class, () -> documentRepository.save(orphan));
     }
 
@@ -67,7 +70,11 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
     @DisplayName("Trigger: updated_at should change on update")
     void shouldUpdateTimestampOnRowChange() throws InterruptedException {
         Client owner = clientRepository.save(new Client(null, "Time", "Test", "time@test.com", null, List.of(), null, null));
-        Document doc = documentRepository.save(new Document(null, owner.id(), "Initial", "Content", null, DocumentTaskStatus.PENDING, null, null));
+        Document doc = documentRepository.save(new Document(
+            null, owner.id(), "Initial", "Content", null,
+            DocumentTaskStatus.PENDING, null, 0, DocumentTaskStatus.PENDING, null, null
+        ));
+
         OffsetDateTime created = doc.updatedAt();
 
         Thread.sleep(100);
@@ -84,8 +91,17 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         Document saved = jdbcClient.sql("INSERT INTO documents (client_id, title, content) VALUES (?, ?, ?) RETURNING *")
             .param(owner.id()).param("Title").param("Content")
             .query((rs, rowNum) -> new Document(
-                rs.getObject("id", UUID.class), owner.id(), "Title", "Content", null,
-                DocumentTaskStatus.valueOf(rs.getString("status")), null, null))
+                rs.getObject("id", UUID.class),
+                owner.id(),
+                "Title",
+                "Content",
+                null,
+                DocumentTaskStatus.valueOf(rs.getString("summary_status")),
+                rs.getString("summary_error_message"),
+                rs.getInt("summary_attempts"),
+                DocumentTaskStatus.valueOf(rs.getString("status")),
+                null,
+                null))
             .single();
 
         assertThat(saved.status()).isEqualTo(DocumentTaskStatus.PENDING);
@@ -97,7 +113,10 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
     void shouldInsertChunksInBatch() {
 
         Client owner = clientRepository.save(new Client(null, "Time", "Test", "time@test2.com", null, List.of(), null, null));
-        Document doc = documentRepository.save(new Document(null, owner.id(), "Initial", "Content", null, DocumentTaskStatus.PENDING, null, null));
+        Document doc = documentRepository.save(new Document(
+            null, owner.id(), "Initial", "Content", null,
+            DocumentTaskStatus.PENDING, null, 0, DocumentTaskStatus.PENDING, null, null
+        ));
 
         List<TextSegment> segments = List.of(
             TextSegment.from("Chunk content one"),
@@ -211,17 +230,17 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
             chunkRepository.insertChunkVector(docId, existingChunkId, content, vector);
 
             Map<String, Object> embeddingResult = jdbcClient.sql("""
-            SELECT embedding 
-            FROM document_chunk_embeddings 
-            WHERE chunk_id = ?
-            """)
+                    SELECT embedding
+                    FROM document_chunk_embeddings
+                    WHERE chunk_id = ?
+                    """)
                 .param(existingChunkId)
                 .query()
                 .singleRow();
 
             assertThat(embeddingResult.get("embedding")).isNotNull();
         }
-        
+
     }
 
     @Nested
@@ -243,13 +262,13 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
 
             documentId = UUID.randomUUID();
             jdbcClient.sql("""
-                    INSERT INTO documents (id, client_id, title, content, status) 
+                    INSERT INTO documents (id, client_id, title, content, status)
                     VALUES (?, ?, 'Test Doc', 'Source content', 'PENDING'::task_status)
                 """).params(documentId, clientId).update();
 
             chunkId = UUID.randomUUID();
             jdbcClient.sql("""
-                    INSERT INTO document_chunks (id, document_id, content, status) 
+                    INSERT INTO document_chunks (id, document_id, content, status)
                     VALUES (?, ?, 'Chunk content', 'PENDING'::task_status)
                 """).params(chunkId, documentId).update();
         }
@@ -417,7 +436,10 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
                 transactionTemplate.execute(status -> {
                     Optional<DocumentChunk> claim = chunkRepository.claimNextPendingChunk(docId, 5);
                     latch.countDown();
-                    try { Thread.sleep(1000); } catch (InterruptedException e) {}
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                    }
                     return claim;
                 })
             );
@@ -616,9 +638,9 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         private UUID insertChunkAtState(UUID dId, DocumentTaskStatus status, int attempts, OffsetDateTime updatedAt) {
             UUID id = UUID.randomUUID();
             jdbcClient.sql("""
-                INSERT INTO document_chunks (id, document_id, content, status, attempts, updated_at)
-                VALUES (?, ?, 'Content', ?::task_status, ?, ?)
-                """)
+                    INSERT INTO document_chunks (id, document_id, content, status, attempts, updated_at)
+                    VALUES (?, ?, 'Content', ?::task_status, ?, ?)
+                    """)
                 .params(id, dId, status.name(), attempts, updatedAt)
                 .update();
             return id;

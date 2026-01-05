@@ -39,7 +39,7 @@ class DocumentControllerTest {
         UUID clientId = UUID.randomUUID();
         DocumentRequest request = new DocumentRequest("Title", "Content");
         DocumentResponse response = new DocumentResponse(
-            UUID.randomUUID(), clientId, "Title", "Content", null, DocumentTaskStatus.PROCESSING, OffsetDateTime.now()
+            UUID.randomUUID(), clientId, "Title", "Content", null, DocumentTaskStatus.PROCESSING, DocumentTaskStatus.PROCESSING, OffsetDateTime.now()
         );
 
         when(documentService.ingestDocument(eq("Title"), eq("Content"), eq(clientId)))
@@ -58,7 +58,7 @@ class DocumentControllerTest {
     void getDocument_ShouldReturnDetails() throws Exception {
         UUID docId = UUID.randomUUID();
         DocumentResponse response = new DocumentResponse(
-            docId, UUID.randomUUID(), "Title", "Content", "Summary", DocumentTaskStatus.READY, OffsetDateTime.now()
+            docId, UUID.randomUUID(), "Title", "Content", "Summary", DocumentTaskStatus.READY, DocumentTaskStatus.READY, OffsetDateTime.now()
         );
 
         when(documentService.getById(docId)).thenReturn(response);

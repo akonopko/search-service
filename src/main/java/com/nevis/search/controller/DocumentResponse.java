@@ -8,15 +8,18 @@ import java.util.UUID;
 
 public record DocumentResponse(
     UUID id,
-    
+
     @JsonProperty("client_id")
     UUID clientId,
-    
+
     String title,
     
     String content,
     
     String summary,
+
+    @JsonProperty("summary_status")
+    DocumentTaskStatus summaryStatus,
     
     DocumentTaskStatus status,
     

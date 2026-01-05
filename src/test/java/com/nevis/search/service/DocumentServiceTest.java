@@ -45,7 +45,8 @@ class DocumentServiceTest {
             UUID clientId = UUID.randomUUID();
             UUID docId = UUID.randomUUID();
 
-            Document mockDoc = new Document(docId, clientId, "Test", content, null, DocumentTaskStatus.PENDING, null, null);
+            Document mockDoc = new Document(docId, clientId, "Test", content, null,
+                DocumentTaskStatus.PENDING, null, 0, DocumentTaskStatus.PENDING, null, null);
 
             when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
@@ -75,7 +76,8 @@ class DocumentServiceTest {
             UUID clientId = UUID.randomUUID();
             UUID docId = UUID.randomUUID();
 
-            Document mockDoc = new Document(docId, clientId, "Exact", content, null, DocumentTaskStatus.PENDING, null, null);
+            Document mockDoc = new Document(docId, clientId, "Exact", content, null,
+                DocumentTaskStatus.PENDING, null, 0, DocumentTaskStatus.PENDING, null, null);
             when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
             documentService.ingestDocument("Exact", content, clientId);
@@ -93,7 +95,8 @@ class DocumentServiceTest {
             UUID clientId = UUID.randomUUID();
             UUID docId = UUID.randomUUID();
 
-            Document mockDoc = new Document(docId, clientId, "Empty", content, null, DocumentTaskStatus.PENDING, null, null);
+            Document mockDoc = new Document(docId, clientId, "Empty", content, null,
+                DocumentTaskStatus.PENDING, null, 0, DocumentTaskStatus.PENDING, null, null);
             when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
             documentService.ingestDocument("Empty", content, clientId);
@@ -109,7 +112,8 @@ class DocumentServiceTest {
             UUID clientId = UUID.randomUUID();
             UUID docId = UUID.randomUUID();
 
-            Document mockDoc = new Document(docId, clientId, "Short", content, null, DocumentTaskStatus.PENDING, null, null);
+            Document mockDoc = new Document(docId, clientId, "Short", content, null,
+                DocumentTaskStatus.PENDING, null, 0, DocumentTaskStatus.PENDING, null, null);
             when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
             documentService.ingestDocument("Short", content, clientId);
@@ -125,7 +129,8 @@ class DocumentServiceTest {
             UUID clientId = UUID.randomUUID();
             UUID docId = UUID.randomUUID();
 
-            Document mockDoc = new Document(docId, clientId, "Whitespace", content, null, DocumentTaskStatus.PENDING, null, null);
+            Document mockDoc = new Document(docId, clientId, "Whitespace", content, null,
+                DocumentTaskStatus.PENDING, null, 0, DocumentTaskStatus.PENDING, null, null);
             when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
             documentService.ingestDocument("Whitespace", content, clientId);
@@ -141,7 +146,8 @@ class DocumentServiceTest {
             UUID clientId = UUID.randomUUID();
             UUID docId = UUID.randomUUID();
 
-            Document mockDoc = new Document(docId, clientId, "LargeWord", content, null, DocumentTaskStatus.PENDING, null, null);
+            Document mockDoc = new Document(docId, clientId, "LargeWord", content, null,
+                DocumentTaskStatus.PENDING, null, 0, DocumentTaskStatus.PENDING, null, null);
             when(repository.save(any(Document.class))).thenReturn(mockDoc);
 
             documentService.ingestDocument("LargeWord", content, clientId);
@@ -155,7 +161,6 @@ class DocumentServiceTest {
     class DocumentSaveEmbeddingsTest {
 
         private final UUID docId = UUID.randomUUID();
-
         private final UUID chunkId = UUID.randomUUID();
 
         @Test
@@ -202,5 +207,4 @@ class DocumentServiceTest {
             verify(repository).updateStatus(docId, DocumentTaskStatus.READY);
         }
     }
-
 }

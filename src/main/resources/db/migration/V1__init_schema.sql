@@ -33,6 +33,9 @@ CREATE TABLE documents (
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     summary TEXT,
+    summary_status task_status DEFAULT 'PENDING',
+    summary_error_message TEXT,
+    summary_attempts INTEGER DEFAULT 0,
     status task_status DEFAULT 'PENDING',
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
