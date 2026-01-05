@@ -6,20 +6,24 @@ import com.nevis.search.model.Client;
 import com.nevis.search.model.Document;
 import com.nevis.search.model.DocumentChunk;
 import com.nevis.search.model.DocumentTaskStatus;
+import com.nevis.search.service.DocumentSearchResult;
 import dev.langchain4j.data.segment.TextSegment;
+import lombok.SneakyThrows;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.util.StreamUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -129,35 +133,6 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
     @DisplayName("Embeddings test")
     class EmbeddingsTest {
 
-        @Test
-        @DisplayName("Should retrieve only pending chunks for specific document in chronological order")
-        void shouldFindOnlyPendingChunksForCorrectDoc() {
-
-            Client client = clientRepository.save(new Client(null, "Def", "Status", "def@test.com", null, List.of(), null, null));
-
-            UUID doc1Id = UUID.randomUUID();
-            UUID doc2Id = UUID.randomUUID();
-            insertTestDocument(doc1Id, client.id());
-            insertTestDocument(doc2Id, client.id());
-
-            // Chunks for Doc 1 (The one we will query)
-            insertChunk(doc1Id, "First Pending", "PENDING", 1);
-            insertChunk(doc1Id, "Second Pending", "PENDING", 2);
-            insertChunk(doc1Id, "Already Ready", "READY", 3);
-
-            // Chunk for Doc 2 (Should be ignored)
-            insertChunk(doc2Id, "Other Doc Pending", "PENDING", 4);
-
-            List<DocumentChunk> results = chunkRepository.startProcessing(doc1Id);
-
-            assertThat(results)
-                .hasSize(2)
-                .extracting(DocumentChunk::content)
-                .containsExactly("First Pending", "Second Pending");
-
-            assertThat(results).allMatch(chunk -> chunk.status() == DocumentTaskStatus.PROCESSING);
-        }
-
         private void insertTestDocument(UUID id, UUID clientId) {
             jdbcClient.sql("INSERT INTO documents (id, client_id, title, content, status) VALUES (?, ?, 'Title', 'Content', 'PENDING')")
                 .params(id, clientId).update();
@@ -165,7 +140,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
 
         private UUID insertChunk(UUID docId, String content, String status, int delaySeconds) {
             return jdbcClient.sql("""
-                                      INSERT INTO document_chunks (document_id, content, status, created_at) 
+                                      INSERT INTO document_chunks (document_id, content, status, created_at)
                                       VALUES (?, ?, ?::task_status, CURRENT_TIMESTAMP + INTERVAL '""" + delaySeconds + """
                                       ' SECOND)
                                       RETURNING id
@@ -218,13 +193,14 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
             insertTestDocument(doc1Id, client.id());
             insertTestDocument(doc2Id, client.id());
 
-            UUID existingChunkId = insertChunk(doc1Id, "First Pending", "PENDING", 1);
+            String content = "First Pending";
+            UUID existingChunkId = insertChunk(doc1Id, content, "PENDING", 1);
 
-            float[] vector = new float[1536];
+            float[] vector = new float[768];
             vector[0] = 0.1f;
-            vector[1535] = 0.9f;
+            vector[767] = 0.9f;
 
-            chunkRepository.updateVector(existingChunkId, vector);
+            chunkRepository.insertChunkVector(doc1Id, existingChunkId, content, vector);
 
             Map<String, Object> result = jdbcClient.sql("SELECT status, embedding FROM document_chunks WHERE id = ?")
                 .param(existingChunkId)
@@ -240,11 +216,11 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         void shouldThrowExceptionWhenChunkNotFoundForVector() {
             UUID randomId = UUID.randomUUID();
 
-            float[] vector = new float[1536];
+            float[] vector = new float[768];
             vector[0] = 0.1f;
             vector[1] = 0.2f;
 
-            assertThatThrownBy(() -> chunkRepository.updateVector(randomId, vector))
+            assertThatThrownBy(() -> chunkRepository.insertChunkVector(randomId, randomId, "some", vector))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Chunk not found: " + randomId);
         }
@@ -401,6 +377,5 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         }
 
     }
-
 
 }

@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static java.util.Collections.emptyList;
@@ -54,7 +55,7 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Transactional
-    public void saveEmbeddings(UUID docId, Map<UUID, float[]> embeddingMap) {
+    public void saveEmbeddings(UUID docId, UUID chunkId, Map<String, float[]> embeddingMap) {
         if (embeddingMap == null || embeddingMap.isEmpty()) {
             log.warn("Doc {}: saveEmbeddings called with empty data", docId);
             return;
@@ -62,7 +63,10 @@ public class DocumentServiceImpl implements DocumentService {
 
         log.info("Doc {}: Updating {} chunk embeddings in database", docId, embeddingMap.size());
 
-        embeddingMap.forEach(chunkRepository::updateVector);
+        embeddingMap.forEach((term, vector) ->
+            chunkRepository.insertChunkVector(docId, chunkId, term, vector));
+
+        chunkRepository.updateStatus(chunkId, DocumentTaskStatus.READY);
 
         if (chunkRepository.areAllChunksProcessed(docId)) {
             log.info("Doc {}: Updating status to Ready", docId);
