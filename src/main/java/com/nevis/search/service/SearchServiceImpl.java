@@ -7,6 +7,7 @@ import com.nevis.search.repository.ClientRepository;
 import com.nevis.search.repository.DocumentChunkRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -25,6 +26,9 @@ public class SearchServiceImpl implements SearchService {
     private static final int MIN_QUERY_LENGTH = 3;
     private static final int MAX_QUERY_LENGTH = 500;
     private static final double MIN_SIMILARITY_THRESHOLD = 0.25;
+
+    @Value("${app.document.similarity-threshold:0.5}")
+    private double documentSimilarityThreshold;
 
     @Override
     public ClientSearchResponse findClient(String query) {
@@ -45,7 +49,7 @@ public class SearchServiceImpl implements SearchService {
             float[] queryVector = embeddingService.embedQuery(query);
 
             List<DocumentSearchResultItem> rawResults = chunkRepository.findSimilar(
-                queryVector, 10, clientId
+                queryVector, 10, clientId, documentSimilarityThreshold
             );
 
             List<DocumentSearchResultItem> filteredResults = rawResults.stream()

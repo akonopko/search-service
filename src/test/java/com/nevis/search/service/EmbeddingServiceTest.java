@@ -81,7 +81,7 @@ class EmbeddingServiceTest {
             DocumentChunk chunk = createChunk(docId, "Sample content");
 
             when(chunkRepository.countPendingByDocumentId(docId)).thenReturn(1);
-            when(chunkRepository.claimNextPendingChunk(docId)).thenReturn(Optional.of(chunk));
+            when(chunkRepository.claimNextPendingChunk(eq(docId), anyInt())).thenReturn(Optional.of(chunk));
             when(chatModel.chat(anyString())).thenReturn("Tax, KYC, AML");
 
             float[] vector = new float[]{0.1f, 0.2f};
@@ -103,7 +103,7 @@ class EmbeddingServiceTest {
             DocumentChunk chunk = createChunk(docId, "Content");
 
             when(chunkRepository.countPendingByDocumentId(docId)).thenReturn(1);
-            when(chunkRepository.claimNextPendingChunk(docId)).thenReturn(Optional.of(chunk));
+            when(chunkRepository.claimNextPendingChunk(eq(docId), anyInt())).thenReturn(Optional.of(chunk));
             when(chatModel.chat(anyString())).thenReturn("");
 
             embeddingService.generateForDocument(docId);
@@ -119,7 +119,7 @@ class EmbeddingServiceTest {
             DocumentChunk chunk = createChunk(docId, "Error content");
 
             when(chunkRepository.countPendingByDocumentId(docId)).thenReturn(1);
-            when(chunkRepository.claimNextPendingChunk(docId)).thenReturn(Optional.of(chunk));
+            when(chunkRepository.claimNextPendingChunk(eq(docId), anyInt())).thenReturn(Optional.of(chunk));
             when(chatModel.chat(anyString())).thenThrow(new RuntimeException("API Down"));
 
             embeddingService.generateForDocument(docId);
@@ -135,7 +135,7 @@ class EmbeddingServiceTest {
 
             embeddingService.generateForDocument(docId);
 
-            verify(chunkRepository, never()).claimNextPendingChunk(any());
+            verify(chunkRepository, never()).claimNextPendingChunk(any(), anyInt());
             verifyNoInteractions(chatModel, embeddingModel, documentService);
         }
 
@@ -147,7 +147,7 @@ class EmbeddingServiceTest {
             String terms = "Term1, Term2"; // 12 characters
 
             when(chunkRepository.countPendingByDocumentId(docId)).thenReturn(1);
-            when(chunkRepository.claimNextPendingChunk(docId)).thenReturn(Optional.of(chunk));
+            when(chunkRepository.claimNextPendingChunk(eq(docId), anyInt())).thenReturn(Optional.of(chunk));
             when(chatModel.chat(anyString())).thenReturn(terms);
             when(embeddingModel.embedAll(anyList())).thenReturn(Response.from(List.of(new Embedding(new float[0]), new Embedding(new float[0]))));
 

@@ -191,7 +191,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
             UUID randomId = UUID.randomUUID();
             assertThatThrownBy(() -> chunkRepository.updateStatus(randomId, DocumentTaskStatus.READY))
                 .isInstanceOf(EntityNotFoundException.class)
-                .hasMessageContaining("Chunk not found: " + randomId);
+                .hasMessageContaining("Entity not found: " + randomId);
         }
 
         @Test
@@ -381,7 +381,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
             insertChunk(docId, DocumentTaskStatus.PENDING);
             insertChunk(docId, DocumentTaskStatus.PENDING);
 
-            Optional<DocumentChunk> claimed = chunkRepository.claimNextPendingChunk(docId);
+            Optional<DocumentChunk> claimed = chunkRepository.claimNextPendingChunk(docId, 5);
 
             assertThat(claimed).isPresent();
             assertThat(claimed.get().status()).isEqualTo(DocumentTaskStatus.PROCESSING);
@@ -415,7 +415,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
 
             CompletableFuture<Optional<DocumentChunk>> thread1Claim = CompletableFuture.supplyAsync(() ->
                 transactionTemplate.execute(status -> {
-                    Optional<DocumentChunk> claim = chunkRepository.claimNextPendingChunk(docId);
+                    Optional<DocumentChunk> claim = chunkRepository.claimNextPendingChunk(docId, 5);
                     latch.countDown();
                     try { Thread.sleep(1000); } catch (InterruptedException e) {}
                     return claim;
@@ -423,7 +423,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
             );
 
             latch.await();
-            Optional<DocumentChunk> thread2Claim = chunkRepository.claimNextPendingChunk(docId);
+            Optional<DocumentChunk> thread2Claim = chunkRepository.claimNextPendingChunk(docId, 5);
 
             assertThat(thread1Claim.get()).isPresent();
             assertThat(thread2Claim).isPresent();
@@ -472,13 +472,13 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         }
 
         private void assertNoResult(float[] queryVector) {
-            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(queryVector, 1, Optional.empty());
+            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(queryVector, 1, Optional.empty(), 0.5);
 
             assertThat(results).isEmpty();
         }
 
         private void assertQueryScore(float[] queryVector, String summary, double scoreLower, double scoreUpper) {
-            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(queryVector, 1, Optional.empty());
+            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(queryVector, 1, Optional.empty(), 0.5);
 
             assertThat(results).isNotEmpty();
             DocumentSearchResultItem topResult = results.get(0);
@@ -562,7 +562,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         void shouldRecoverFailedChunks() {
             UUID chunkId = insertChunkAtState(docId, DocumentTaskStatus.FAILED, 0, OffsetDateTime.now());
 
-            List<UUID> affectedDocs = chunkRepository.resetStaleAndFailedChunks();
+            List<UUID> affectedDocs = chunkRepository.resetStaleAndFailedChunks(5, 5);
 
             assertThat(affectedDocs).containsExactly(docId);
 
@@ -577,7 +577,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
             OffsetDateTime staleTime = OffsetDateTime.now().minusMinutes(10);
             UUID chunkId = insertChunkAtState(docId, DocumentTaskStatus.PROCESSING, 0, staleTime);
 
-            List<UUID> affectedDocs = chunkRepository.resetStaleAndFailedChunks();
+            List<UUID> affectedDocs = chunkRepository.resetStaleAndFailedChunks(5, 5);
 
             assertThat(affectedDocs).containsExactly(docId);
 
@@ -590,7 +590,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         void shouldNotRecoverRecentProcessingChunks() {
             UUID chunkId = insertChunkAtState(docId, DocumentTaskStatus.PROCESSING, 0, OffsetDateTime.now());
 
-            List<UUID> affectedDocs = chunkRepository.resetStaleAndFailedChunks();
+            List<UUID> affectedDocs = chunkRepository.resetStaleAndFailedChunks(5, 5);
 
             assertThat(affectedDocs).isEmpty();
 
@@ -604,7 +604,7 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         void shouldIgnoreDeadLetterChunks() {
             UUID chunkId = insertChunkAtState(docId, DocumentTaskStatus.FAILED, 5, OffsetDateTime.now());
 
-            List<UUID> affectedDocs = chunkRepository.resetStaleAndFailedChunks();
+            List<UUID> affectedDocs = chunkRepository.resetStaleAndFailedChunks(5, 5);
 
             assertThat(affectedDocs).isEmpty();
 

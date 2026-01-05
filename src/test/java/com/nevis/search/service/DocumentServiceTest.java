@@ -26,7 +26,7 @@ class DocumentServiceTest {
     private final DocumentRepository repository = Mockito.mock(DocumentRepository.class);
     private final DocumentChunkRepository chunkRepository = Mockito.mock(DocumentChunkRepository.class);
     private final ApplicationEventPublisher eventPublisher = Mockito.mock(ApplicationEventPublisher.class);
-    private final DocumentService documentService = new DocumentServiceImpl(repository, chunkRepository, eventPublisher);
+    private final DocumentService documentService = new DocumentServiceImpl(repository, chunkRepository, eventPublisher, 3000, 300);
 
     @Nested
     @DisplayName("Split document to chunks")

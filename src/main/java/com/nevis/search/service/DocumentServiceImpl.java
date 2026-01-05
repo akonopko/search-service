@@ -13,6 +13,7 @@ import dev.langchain4j.data.document.splitter.DocumentSplitters;
 import dev.langchain4j.data.segment.TextSegment;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,14 +26,38 @@ import java.util.UUID;
 import static java.util.Collections.emptyList;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class DocumentServiceImpl implements DocumentService {
 
     private final DocumentRepository documentRepository;
     private final DocumentChunkRepository chunkRepository;
-    private final DocumentSplitter splitter = DocumentSplitters.recursive(3000, 300);
+    private final DocumentSplitter splitter;
     private final ApplicationEventPublisher eventPublisher;
+
+    @Value("${app.worker.embeddings.max-attempts:5}")
+    private int maxAttempts;
+
+    @Value("${app.worker.embeddings.stale-threshold-minutes:5}")
+    private int staleThresholdMinutes;
+
+    @Value("${app.document.similarity-threshold:0.5}")
+    private double documentSimilarityThreshold;
+
+    public DocumentServiceImpl(
+        DocumentRepository documentRepository,
+        DocumentChunkRepository chunkRepository,
+        ApplicationEventPublisher eventPublisher,
+        @Value("${app.search.chunk-size:3000}") int chunkSize,
+        @Value("${app.search.chunk-overlap:300}") int chunkOverlap
+    ) {
+        this.documentRepository = documentRepository;
+        this.splitter = DocumentSplitters.recursive(chunkSize, chunkOverlap);
+        this.eventPublisher = eventPublisher;
+        this.chunkRepository = chunkRepository;
+    }
+
+
+
 
     @Override
     @Transactional
@@ -109,7 +134,7 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     public List<DocumentSearchResultItem> search(float[] queryVector, int limit, Optional<UUID> clientId) {
-        return chunkRepository.findSimilar(queryVector, limit, clientId);
+        return chunkRepository.findSimilar(queryVector, limit, clientId, documentSimilarityThreshold);
     }
 
     @Override

@@ -1,9 +1,10 @@
 package com.nevis.search.worker;
 
-import com.nevis.search.event.DocumentRetryEvent;
+import com.nevis.search.event.DocumentEmbeddingsRetryEvent;
 import com.nevis.search.repository.DocumentChunkRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -22,12 +23,18 @@ public class ChunkMaintenanceWorker {
     private final DocumentChunkRepository chunkRepository;
     private final ApplicationEventPublisher eventPublisher;
 
+    @Value("${app.worker.embeddings.max-attempts:5}")
+    private int maxAttempts;
+
+    @Value("${app.worker.embeddings.stale-threshold-minutes:5}")
+    private int staleThresholdMinutes;
+
     @Scheduled(fixedDelayString = "${app.worker.cleanup-interval-ms:60000}")
     @Transactional
     public void cleanupStaleChunks() {
         log.debug("Starting maintenance: checking for failed or stuck chunks...");
 
-        List<UUID> affectedDocIds = chunkRepository.resetStaleAndFailedChunks();
+        List<UUID> affectedDocIds = chunkRepository.resetStaleAndFailedChunks(maxAttempts, staleThresholdMinutes);
 
         if (affectedDocIds.isEmpty()) {
             return;
@@ -39,7 +46,7 @@ public class ChunkMaintenanceWorker {
                  affectedDocIds.size(), uniqueDocIds.size());
 
         uniqueDocIds.forEach(docId ->
-            eventPublisher.publishEvent(new DocumentRetryEvent(docId))
+            eventPublisher.publishEvent(new DocumentEmbeddingsRetryEvent(docId))
         );
     }
 }

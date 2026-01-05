@@ -8,7 +8,6 @@ import com.pgvector.PGvector;
 import dev.langchain4j.data.segment.TextSegment;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -27,15 +26,6 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
 
     private final JdbcClient jdbcClient;
     private final JdbcTemplate jdbcTemplate;
-
-    @Value("${app.worker.max-attempts:5}")
-    private int maxAttempts;
-
-    @Value("${app.worker.stale-threshold-minutes:5}")
-    private int staleThresholdMinutes;
-
-    @Value("${app.document.similarity-threshold:0.5}")
-    private double documentSimilarityThreshold;
 
     private final RowMapper<DocumentChunk> documentChunkMapper = (rs, rowNum) -> new DocumentChunk(
         rs.getObject("id", UUID.class),
@@ -76,9 +66,9 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
         });
     }
 
-    @Override
     @Transactional
-    public Optional<DocumentChunk> claimNextPendingChunk(UUID docId) {
+    @Override
+    public Optional<DocumentChunk> claimNextPendingChunk(UUID docId, int maxAttempts) {
         String sql = """
             UPDATE document_chunks 
             SET status = 'PROCESSING'::task_status, updated_at = NOW()
@@ -189,7 +179,7 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
     }
 
     @Override
-    public List<DocumentSearchResultItem> findSimilar(float[] vector, int limit, Optional<UUID> clientId) {
+    public List<DocumentSearchResultItem> findSimilar(float[] vector, int limit, Optional<UUID> clientId, double documentSimilarityThreshold) {
         PGvector pgVector = new PGvector(vector);
 
         // We use 1 - (dist) to convert distance to a similarity score (0.0 to 1.0)
@@ -233,7 +223,7 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
     }
 
     @Override
-    public List<UUID> resetStaleAndFailedChunks() {
+    public List<UUID> resetStaleAndFailedChunks(int maxAttempts, int staleThresholdMinutes) {
         String sql = """
             UPDATE document_chunks 
             SET status = 'PENDING'::task_status, 
@@ -253,4 +243,5 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
             .query(UUID.class)
             .list();
     }
+
 }

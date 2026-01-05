@@ -13,6 +13,7 @@ import dev.langchain4j.model.output.Response;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -32,6 +33,9 @@ public class EmbeddingServiceImpl implements EmbeddingService {
     private final ChatModel chatModel;
     private final RateLimiter chatLimiter;
     private final RateLimiter embeddingLimiter;
+
+    @Value("${app.worker.embeddings.max-attempts:5}")
+    private int maxAttempts;
 
     private static final String SUMMARY_PROMPT_TEMPLATE =
         """            
@@ -78,7 +82,7 @@ public class EmbeddingServiceImpl implements EmbeddingService {
 
         for (int i = 0; i < totalPending; i++) {
             chunkRepository
-                .claimNextPendingChunk(docId)
+                .claimNextPendingChunk(docId, maxAttempts)
                 .ifPresent(chunk -> processSingleChunk(docId, chunk));
         }
     }

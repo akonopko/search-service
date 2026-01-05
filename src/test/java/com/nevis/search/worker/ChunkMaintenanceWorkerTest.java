@@ -1,6 +1,6 @@
 package com.nevis.search.worker;
 
-import com.nevis.search.event.DocumentRetryEvent;
+import com.nevis.search.event.DocumentEmbeddingsRetryEvent;
 import com.nevis.search.repository.DocumentChunkRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,19 +34,19 @@ class ChunkMaintenanceWorkerTest {
         UUID docId2 = UUID.randomUUID();
         List<UUID> affectedIds = List.of(docId1, docId1, docId2);
         
-        when(chunkRepository.resetStaleAndFailedChunks()).thenReturn(affectedIds);
+        when(chunkRepository.resetStaleAndFailedChunks(anyInt(), anyInt())).thenReturn(affectedIds);
 
         worker.cleanupStaleChunks();
 
-        verify(eventPublisher, times(1)).publishEvent(new DocumentRetryEvent(docId1));
-        verify(eventPublisher, times(1)).publishEvent(new DocumentRetryEvent(docId2));
-        verify(eventPublisher, times(2)).publishEvent(any(DocumentRetryEvent.class));
+        verify(eventPublisher, times(1)).publishEvent(new DocumentEmbeddingsRetryEvent(docId1));
+        verify(eventPublisher, times(1)).publishEvent(new DocumentEmbeddingsRetryEvent(docId2));
+        verify(eventPublisher, times(2)).publishEvent(any(DocumentEmbeddingsRetryEvent.class));
     }
 
     @Test
     @DisplayName("Should not publish any events if no chunks were reset")
     void shouldDoNothingWhenNoChunksAffected() {
-        when(chunkRepository.resetStaleAndFailedChunks()).thenReturn(List.of());
+        when(chunkRepository.resetStaleAndFailedChunks(anyInt(), anyInt())).thenReturn(List.of());
         worker.cleanupStaleChunks();
         verifyNoInteractions(eventPublisher);
     }

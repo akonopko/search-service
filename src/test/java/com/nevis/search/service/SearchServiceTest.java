@@ -90,7 +90,7 @@ class SearchServiceTest {
             DocumentSearchResultItem match = new DocumentSearchResultItem(UUID.randomUUID(), UUID.randomUUID(), "Utility Bill", 0.56, "Address info", DocumentTaskStatus.PENDING, null);
 
             when(embeddingService.embedQuery(query)).thenReturn(vector);
-            when(chunkRepository.findSimilar(eq(vector), anyInt(), any()))
+            when(chunkRepository.findSimilar(eq(vector), anyInt(), any(), anyDouble()))
                 .thenReturn(List.of(match));
 
             DocumentSearchResponse response = searchService.findDocument(Optional.of(clientId), query);
@@ -106,7 +106,7 @@ class SearchServiceTest {
             DocumentSearchResultItem noise = new DocumentSearchResultItem(UUID.randomUUID(), UUID.randomUUID(), "Utility Bill", 0.16, "Content", DocumentTaskStatus.PENDING, null);
 
             when(embeddingService.embedQuery(query)).thenReturn(vector);
-            when(chunkRepository.findSimilar(eq(vector), anyInt(), any()))
+            when(chunkRepository.findSimilar(eq(vector), anyInt(), any(), anyDouble()))
                 .thenReturn(List.of(noise));
 
             DocumentSearchResponse response = searchService.findDocument(Optional.empty(), query);
@@ -129,7 +129,7 @@ class SearchServiceTest {
 
             searchService.findDocument(Optional.of(clientId), query);
 
-            verify(chunkRepository).findSimilar(any(), anyInt(), eq(Optional.of(clientId)));
+            verify(chunkRepository).findSimilar(any(), anyInt(), eq(Optional.of(clientId)), anyDouble());
         }
 
         @Test
@@ -139,7 +139,7 @@ class SearchServiceTest {
 
             searchService.findDocument(Optional.empty(), query);
 
-            verify(chunkRepository).findSimilar(any(), anyInt(), eq(Optional.empty()));
+            verify(chunkRepository).findSimilar(any(), anyInt(), eq(Optional.empty()), anyDouble());
         }
     }
 }
