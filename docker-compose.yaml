@@ -4,36 +4,56 @@ services:
   db:
     image: pgvector/pgvector:pg15
     container_name: nevis-postgres
+    deploy:
+      resources:
+        limits:
+          memory: 1G
     environment:
-      POSTGRES_DB: search_service
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ${DB_NAME:-search_service}
+      POSTGRES_USER: ${DB_USER:-nevis_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-nevis_password}
     ports:
       - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d search_service"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-nevis_user} -d ${DB_NAME:-search_service}"]
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - nevis-network
     restart: always
 
   app:
     build: .
     container_name: nevis-app
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
     ports:
       - "8080:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=dev
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=search_service
-      - DB_USER=user
-      - DB_PASSWORD=password
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/${DB_NAME:-search_service}
+      - SPRING_DATASOURCE_USERNAME=${DB_USER:-nevis_user}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-nevis_password}
+
+      - SPRING_SECURITY_USER_NAME=${API_USERNAME:-nevis_admin}
+      - SPRING_SECURITY_USER_PASSWORD=${API_PASSWORD:-secret_pass_2026}
+
+      - APP_GEMINI_API_KEY=${APP_GEMINI_API_KEY}
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - nevis-network
+    restart: always
+
+networks:
+  nevis-network:
+    driver: bridge
 
 volumes:
   postgres_data:
