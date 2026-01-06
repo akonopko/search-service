@@ -35,14 +35,15 @@ public class SummaryGeneratorServiceImpl implements SummaryGeneratorService {
 
     private static final String SUMMARY_PROMPT_TEMPLATE =
         """
-            Role: Expert Financial Document Analyst.
-            Task: Provide a high-level summary (2-3 sentences) of the document.
-            Focus: Document type (e.g., Tax Return, Passport, Trust Deed), key participants, and the primary financial purpose.
-            Constraint: Maintain a professional tone. Do not include sensitive PII like full account numbers.
+            Act as an expert Wealth Management Analyst. Describe the provided document to be used as a concise CRM entry.
             
-            Output: Output only summary
+            Constraint: Keep the entire description under 2-3 sentences. Use a professional, objective tone
             
-            Document Content:
+            NO Personal Data: Do not extract actual names, account numbers, or specific dollar amounts.
+            
+            Output: Only summary itself
+            
+            Document:
             %s
             """;
 
