@@ -226,19 +226,25 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
     }
 
     @Override
+    @Transactional
     public List<UUID> resetStaleAndFailedChunks(int maxAttempts, int staleThresholdMinutes) {
         String sql = """
-            UPDATE document_chunks 
-            SET status = 'PENDING'::task_status, 
-                attempts = attempts + 1, 
-                updated_at = NOW()
+        UPDATE document_chunks
+        SET status = 'PENDING'::task_status,
+            attempts = attempts + 1,
+            updated_at = NOW()
+        WHERE id IN (
+            SELECT id
+            FROM document_chunks
             WHERE (
                 status = 'FAILED'::task_status 
                 OR (status = 'PROCESSING'::task_status AND updated_at < NOW() - (INTERVAL '1 minute' * :staleMins))
             )
-            AND attempts < :maxAttempts   
-            RETURNING document_id        
-            """;
+            AND attempts < :maxAttempts
+            FOR UPDATE SKIP LOCKED
+        )
+        RETURNING document_id
+        """;
 
         return jdbcClient.sql(sql)
             .param("maxAttempts", maxAttempts)

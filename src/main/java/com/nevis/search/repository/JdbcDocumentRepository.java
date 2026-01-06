@@ -203,21 +203,26 @@ public class JdbcDocumentRepository implements DocumentRepository {
             .optional();
     }
 
-    @Transactional
     @Override
+    @Transactional
     public List<UUID> resetStaleAndFailedSummaries(int maxAttempts, int staleThresholdMinutes) {
         String sql = """
-            UPDATE documents 
-            SET summary_status = 'PENDING'::task_status,
-                summary_attempts = summary_attempts + 1, 
-                updated_at = NOW()
+        UPDATE documents 
+        SET summary_status = 'PENDING'::task_status,
+            summary_attempts = summary_attempts + 1, 
+            updated_at = NOW()
+        WHERE id IN (
+            SELECT id 
+            FROM documents
             WHERE (
                 summary_status = 'FAILED'::task_status 
                 OR (summary_status = 'PROCESSING'::task_status AND updated_at < NOW() - (INTERVAL '1 minute' * :staleMins))
             )
-            AND summary_attempts < :maxAttempts   
-            RETURNING id        
-            """;
+            AND summary_attempts < :maxAttempts
+            FOR UPDATE SKIP LOCKED
+        )
+        RETURNING id        
+        """;
 
         return jdbcClient.sql(sql)
             .param("maxAttempts", maxAttempts)
