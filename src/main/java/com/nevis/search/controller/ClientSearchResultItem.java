@@ -7,7 +7,6 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public record ClientSearchResultItem(
-    UUID id,
     @JsonProperty("client_id") UUID clientId,
     @JsonProperty("first_name") String firstName,
     @JsonProperty("last_name") String lastName,
@@ -18,7 +17,6 @@ public record ClientSearchResultItem(
 ) {
     public static ClientSearchResultItem from(Client client, double score) {
         return new ClientSearchResultItem(
-            client.id(),
             client.id(),
             client.firstName(),
             client.lastName(),

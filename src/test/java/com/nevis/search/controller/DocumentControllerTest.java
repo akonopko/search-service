@@ -1,6 +1,7 @@
 package com.nevis.search.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nevis.search.config.SecurityConfig;
 import com.nevis.search.exception.EntityNotFoundException;
 import com.nevis.search.model.DocumentTaskStatus;
 import com.nevis.search.service.DocumentService;
@@ -8,7 +9,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -22,6 +25,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(DocumentController.class)
+@Import(SecurityConfig.class)
+@WithMockUser(username = "nevis_admin")
 class DocumentControllerTest {
 
     @Autowired
