@@ -30,7 +30,9 @@ import static org.awaitility.Awaitility.await;
         "app.search.chunk-size=3000",
         "app.search.chunk-overlap=300",
         "app.summary.max-chars=200000",
-        "app.worker.summary.max-attempts=5"
+        "app.worker.summary.max-attempts=5",
+        "spring.security.user.name=test_user",
+        "spring.security.user.password=test_password",
     }
 )
 @EnabledIfEnvironmentVariable(named = "APP_GEMINI_API_KEY", matches = ".+")
@@ -44,6 +46,7 @@ public class NevisE2ETest extends BaseIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        restTemplate = restTemplate.withBasicAuth("test_user", "test_password");
         jdbcClient.sql("delete from clients").update();
         jdbcClient.sql("delete from documents").update();
         jdbcClient.sql("delete from document_chunks").update();
