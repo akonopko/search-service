@@ -4,6 +4,7 @@ import com.nevis.search.config.SecurityConfig;
 import com.nevis.search.model.DocumentTaskStatus;
 import com.nevis.search.service.ClientService;
 import com.nevis.search.service.SearchService;
+import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +16,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,7 +48,7 @@ class SearchControllerTest {
         UUID clientId = UUID.randomUUID();
 
         var mockClient = new ClientSearchResultItem(
-            UUID.randomUUID(), "John", "Doe", "john@example.com", "desc", 0.95, OffsetDateTime.now()
+            UUID.randomUUID(), "John", "Doe", "john@example.com", "desc", 0.95, Arrays.asList("link1", "link2"), OffsetDateTime.now()
         );
         var mockDoc = new DocumentSearchResultItem(
             UUID.randomUUID(), clientId, "Tax Report", 0.85, "Content summary", 
@@ -68,6 +70,8 @@ class SearchControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.clientMatches").isArray())
             .andExpect(jsonPath("$.clientMatches[0].first_name").value("John"))
+            .andExpect(jsonPath("$.clientMatches[0].social_links[0]").value("link1"))
+            .andExpect(jsonPath("$.clientMatches[0].social_links[1]").value("link2"))
             .andExpect(jsonPath("$.documents[0].title").value("Tax Report"))
             .andExpect(jsonPath("$.documents[0].client_id").value(clientId.toString()));
     }
