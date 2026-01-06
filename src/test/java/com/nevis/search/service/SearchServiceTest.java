@@ -51,13 +51,13 @@ class SearchServiceTest {
             String query = "John Doe";
             ClientSearchResultItem mockClient = mock(ClientSearchResultItem.class);
             ClientSearchResponse johnDoe = new ClientSearchResponse(List.of(mockClient), Collections.emptyList());
-            when(clientRepository.search(query))
+            when(clientRepository.search(query, Optional.empty(), Optional.empty()))
                 .thenReturn(johnDoe);
 
             ClientSearchResponse response = searchService.findClient(query);
 
             assertThat(response.matches()).isNotEmpty();
-            verify(clientRepository).search(query);
+            verify(clientRepository).search(query, Optional.empty(), Optional.empty());
         }
 
         @ParameterizedTest

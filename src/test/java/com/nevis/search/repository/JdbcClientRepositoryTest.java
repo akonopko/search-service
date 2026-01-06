@@ -12,6 +12,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.annotation.DirtiesContext;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -24,9 +25,6 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 
 	@Autowired
 	private JdbcClient jdbcClient;
-
-	@Autowired
-	private SearchProperties searchProperties;
 
 	@Test
 	@DisplayName("Happy Path: Save and find client")
@@ -91,7 +89,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 		@Test
 		@DisplayName("1. Full Name: Search by 'First Last' (Exact)")
 		void fullNameSearch() {
-			var response = repository.search("Aleksandr Konopko");
+			var response = repository.search("Aleksandr Konopko", Optional.empty(), Optional.empty());
 
 			assertThat(response.matches()).hasSize(1);
 			assertThat(response.matches().get(0).firstName()).isEqualTo("Aleksandr");
@@ -100,7 +98,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 		@Test
 		@DisplayName("2. Swapped Name: Search by 'Last First' (Exact)")
 		void swappedNameSearch() {
-			var response = repository.search("Konopko Aleksandr");
+			var response = repository.search("Konopko Aleksandr", Optional.empty(), Optional.empty());
 
 			assertThat(response.matches()).hasSize(1);
 			assertThat(response.matches().get(0).firstName()).isEqualTo("Aleksandr");
@@ -109,7 +107,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 		@Test
 		@DisplayName("3. Typo Collision: Check typos in similar names")
 		void typoCollisionSearch() {
-			var response = repository.search("Aleksanr");
+			var response = repository.search("Aleksanr", Optional.empty(), Optional.empty());
 
 			assertThat(response.matches()).isEmpty();
 			assertThat(response.suggestions())
@@ -120,7 +118,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 		@Test
 		@DisplayName("4. Whitespace: Handle extra spaces and tabs")
 		void extraWhitespaces() {
-			var response = repository.search("   Aleksandr    Konopko  ");
+			var response = repository.search("   Aleksandr    Konopko  ", Optional.empty(), Optional.empty());
 
 			assertThat(response.matches().size()).isEqualTo(1);
 			assertThat(response.suggestions()).isEmpty();
@@ -129,7 +127,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 		@Test
 		@DisplayName("5. Substring Overlap: Part of a word inside another")
 		void substringOverlap() {
-			var response = repository.search("Oleks");
+			var response = repository.search("Oleks", Optional.empty(), Optional.empty());
 
 			assertThat(response.matches()).hasSize(1);
 			assertThat(response.suggestions()).isEmpty();
@@ -139,7 +137,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 		@Test
 		@DisplayName("6. Short Query: still works")
 		void veryShortQuery() {
-			var response = repository.search("Ol");
+			var response = repository.search("Ol", Optional.empty(), Optional.empty());
 
 			assertThat(response.matches()).isNotEmpty();
 			assertThat(response.matches()).isNotEmpty();
@@ -148,7 +146,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 		@Test
 		@DisplayName("7. Noisy Description: Search by phrase from the middle of description")
 		void middleDescriptionSearch() {
-			var response = repository.search("Developer");
+			var response = repository.search("Developer", Optional.empty(), Optional.empty());
 
 			assertThat(response.matches())
 				.extracting(ClientSearchResultItem::description)
@@ -158,7 +156,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 		@Test
 		@DisplayName("8. Similar characters: Handle character similarity")
 		void similarCharsSearch() {
-			var response = repository.search("Konovko");
+			var response = repository.search("Konovko", Optional.empty(), Optional.empty());
 
 			assertThat(response.matches()).isEmpty();
 			assertThat(response.suggestions()).hasSizeGreaterThanOrEqualTo(2);
@@ -167,14 +165,14 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 		@Test
 		@DisplayName("9. Null / Empty handling: Boundary conditions")
 		void nullEmptyHandling() {
-			assertThat(repository.search("")).matches(r -> r.matches().isEmpty());
-			assertThat(repository.search(null)).matches(r -> r.matches().isEmpty());
+			assertThat(repository.search("", Optional.empty(), Optional.empty())).matches(r -> r.matches().isEmpty());
+			assertThat(repository.search(null, Optional.empty(), Optional.empty())).matches(r -> r.matches().isEmpty());
 		}
 
 		@Test
 		@DisplayName("10. Description Typo: Fuzzy search within description")
 		void descriptionTypoSearch() {
-			var response = repository.search("Pyton");
+			var response = repository.search("Pyton", Optional.empty(), Optional.empty());
 
 			assertThat(response.matches()).isEmpty();
 			assertThat(response.suggestions().size()).isEqualTo(1);
@@ -186,7 +184,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 		@Test
 		@DisplayName("11. Cross-Field Search: Match Name and Description combined")
 		void crossFieldSearch() {
-			var response = repository.search("Dmitry Frontend");
+			var response = repository.search("Dmitry Frontend", Optional.empty(), Optional.empty());
 
 			assertThat(response.matches()).isEmpty();
 			assertThat(response.suggestions().size()).isEqualTo(1);
@@ -196,7 +194,7 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 		@Test
 		@DisplayName("12. Partial Description: Match start of description word")
 		void partialDescriptionSearch() {
-			var response = repository.search("Front");
+			var response = repository.search("Front", Optional.empty(), Optional.empty());
 
 			assertThat(response.matches())
 				.extracting(ClientSearchResultItem::description)
@@ -206,20 +204,20 @@ class JdbcClientRepositoryTest extends BaseIntegrationTest {
 		@Test
 		@DisplayName("13. Limit: Should respect the maximum results limit")
 		void shouldRespectLimit() {
-			for (int i = 0; i < searchProperties.limit() * 2; i++) {
+			for (int i = 0; i < 20 * 2; i++) {
 				saveClient("ExtraName" + i, "ExtraLast", "extra" + i + "@test.com", "Developer");
 			}
 
-			var response = repository.search("Developer");
+			var response = repository.search("Developer", Optional.of(20), Optional.empty());
 
 			int totalFound = response.matches().size() + response.suggestions().size();
-			assertThat(totalFound).isLessThanOrEqualTo(searchProperties.limit());
+			assertThat(totalFound).isLessThanOrEqualTo(20);
 		}
 
 		@Test
 		@DisplayName("14. Null description: does not become part of index")
 		void nullDescription() {
-			var response = repository.search("null");
+			var response = repository.search("null", Optional.empty(), Optional.empty());
 
 			assertThat(response.matches().isEmpty());
 			assertThat(response.suggestions().isEmpty());

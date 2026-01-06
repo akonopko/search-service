@@ -4,7 +4,6 @@ import com.nevis.search.controller.ClientSearchResponse;
 import com.nevis.search.controller.DocumentSearchResponse;
 import com.nevis.search.controller.DocumentSearchResultItem;
 import com.nevis.search.repository.ClientRepository;
-import com.nevis.search.repository.DocumentChunkRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,14 +26,20 @@ public class SearchServiceImpl implements SearchService {
     private static final int MAX_QUERY_LENGTH = 500;
     private static final double MIN_SIMILARITY_THRESHOLD = 0.5;
 
-    @Value("${app.search.account.limit:10}")
+    @Value("${app.search.account.limit:}")
     private Integer accountSearchLimit;
+
+    @Value("${app.search.account.similarity:}")
+    private Double accountSearchThreshold;
+
+    @Value("${app.search.document.limit:}")
+    private Integer documentSearchLimit;
 
     @Override
     public ClientSearchResponse findClient(String query) {
         validateQuery(query);
         log.debug("Searching for clients with query: {}", query);
-        return clientRepository.search(query);
+        return clientRepository.search(query, Optional.ofNullable(accountSearchLimit), Optional.ofNullable(accountSearchThreshold));
     }
 
     @Override
@@ -49,7 +54,7 @@ public class SearchServiceImpl implements SearchService {
             float[] queryVector = embeddingService.embedQuery(query);
 
             List<DocumentSearchResultItem> rawResults = documentService.search(
-                queryVector, Optional.ofNullable(accountSearchLimit), clientId
+                queryVector, Optional.ofNullable(documentSearchLimit), clientId
             );
 
             List<DocumentSearchResultItem> filteredResults = rawResults.stream()

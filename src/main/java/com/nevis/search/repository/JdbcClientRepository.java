@@ -19,11 +19,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JdbcClientRepository implements ClientRepository {
 
+    public static final double DEFAULT_SIMILARITY_THRESHOLD = 0.4;
+    public static Integer DEFAULT_LIMIT = 50;
+
     private record ClientWithScore(Client client, double score, boolean isExact) {}
 
     private final JdbcClient jdbcClient;
-
-    private final SearchProperties searchProperties;
 
     private final RowMapper<Client> clientRowMapper = (rs, rowNum) -> new Client(
         rs.getObject("id", UUID.class),
@@ -62,15 +63,17 @@ public class JdbcClientRepository implements ClientRepository {
             .optional();
     }
 
-    @Override
     @Transactional(readOnly = true)
-    public ClientSearchResponse search(String query) {
+    @Override
+    public ClientSearchResponse search(String query, Optional<Integer> limit, Optional<Double> similarity) {
         if (query == null || query.isBlank()) {
             return new ClientSearchResponse(List.of(), List.of());
         }
 
+        Double resultSimilarity = similarity.orElse(DEFAULT_SIMILARITY_THRESHOLD);
+
         jdbcClient
-            .sql("SET LOCAL pg_trgm.strict_word_similarity_threshold = " + searchProperties.threshold())
+            .sql("SET LOCAL pg_trgm.strict_word_similarity_threshold = " + resultSimilarity)
             .update();
 
         String cleanQuery = query.trim().toLowerCase();
@@ -90,10 +93,12 @@ public class JdbcClientRepository implements ClientRepository {
             LIMIT :limit
             """;
 
+        Integer resultLimit = limit.orElse(DEFAULT_LIMIT);
+
         var results = jdbcClient.sql(sql)
             .param("query", cleanQuery)
             .param("pattern", "%" + cleanQuery + "%")
-            .param("limit", searchProperties.limit())
+            .param("limit", resultLimit)
             .query((rs, rowNum) -> new ClientWithScore(
                 clientRowMapper.mapRow(rs, rowNum),
                 rs.getDouble("score"),
