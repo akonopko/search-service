@@ -2,6 +2,7 @@ package com.nevis.search.controller;
 
 import com.nevis.search.config.SecurityConfig;
 import com.nevis.search.model.DocumentTaskStatus;
+import com.nevis.search.service.ClientService;
 import com.nevis.search.service.SearchService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,9 @@ class SearchControllerTest {
 
     @MockitoBean
     private SearchService searchService;
+
+    @MockitoBean
+    private ClientService clientService;
 
     @Test
     @DisplayName("Should return combined search results with 200 OK")

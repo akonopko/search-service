@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nevis.search.config.SecurityConfig;
 import com.nevis.search.exception.EntityNotFoundException;
 import com.nevis.search.model.DocumentTaskStatus;
+import com.nevis.search.service.ClientService;
 import com.nevis.search.service.DocumentService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -38,6 +40,9 @@ class DocumentControllerTest {
     @MockitoBean
     private DocumentService documentService;
 
+    @MockitoBean
+    private ClientService clientService;
+
     @Test
     @DisplayName("POST /clients/{id}/documents should start ingestion and return 201")
     void createDocument_ShouldReturn201() throws Exception {
@@ -49,6 +54,8 @@ class DocumentControllerTest {
 
         when(documentService.ingestDocument(eq("Title"), eq("Content"), eq(clientId)))
             .thenReturn(response);
+
+        when(clientService.getById(clientId)).thenReturn(mock(ClientResponse.class));
 
         mockMvc.perform(post("/clients/{id}/documents", clientId)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -87,6 +94,6 @@ class DocumentControllerTest {
                 .contentType(MediaType.APPLICATION_JSON))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.message").value(errorMessage))
-            .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
+            .andExpect(jsonPath("$.errorCode").value("404"));
     }
 }

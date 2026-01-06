@@ -2,6 +2,7 @@ package com.nevis.search.service;
 
 import com.nevis.search.controller.ClientRequest;
 import com.nevis.search.controller.ClientResponse;
+import com.nevis.search.controller.ClientSearchResponse;
 import com.nevis.search.exception.EntityNotFoundException;
 import com.nevis.search.model.Client;
 import com.nevis.search.repository.ClientRepository;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -52,6 +54,11 @@ public class ClientServiceImpl implements ClientService {
                 log.warn("Client not found for ID: {}", id);
                 return new EntityNotFoundException(id);
             });
+    }
+
+    @Override
+    public ClientSearchResponse search(String query, Optional<Integer> limit, Optional<Double> similarity) {
+        return clientRepository.search(query, limit, similarity);
     }
 
     /**

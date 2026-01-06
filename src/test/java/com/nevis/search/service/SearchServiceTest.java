@@ -4,6 +4,7 @@ import com.nevis.search.controller.ClientSearchResponse;
 import com.nevis.search.controller.ClientSearchResultItem;
 import com.nevis.search.controller.DocumentSearchResponse;
 import com.nevis.search.controller.DocumentSearchResultItem;
+import com.nevis.search.exception.WrongQueryException;
 import com.nevis.search.model.*;
 import com.nevis.search.repository.ClientRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -31,7 +32,7 @@ import static org.mockito.Mockito.*;
 class SearchServiceTest {
 
     @Mock
-    private ClientRepository clientRepository;
+    private ClientService clientService;
 
     @Mock
     private DocumentService documentService;
@@ -51,13 +52,13 @@ class SearchServiceTest {
             String query = "John Doe";
             ClientSearchResultItem mockClient = mock(ClientSearchResultItem.class);
             ClientSearchResponse johnDoe = new ClientSearchResponse(List.of(mockClient), Collections.emptyList());
-            when(clientRepository.search(query, Optional.empty(), Optional.empty()))
+            when(clientService.search(query, Optional.empty(), Optional.empty()))
                 .thenReturn(johnDoe);
 
             ClientSearchResponse response = searchService.findClient(query);
 
             assertThat(response.matches()).isNotEmpty();
-            verify(clientRepository).search(query, Optional.empty(), Optional.empty());
+            verify(clientService).search(query, Optional.empty(), Optional.empty());
         }
 
         @ParameterizedTest
@@ -65,14 +66,14 @@ class SearchServiceTest {
         @ValueSource(strings = {" ", "a", "ab"})
         void shouldThrowExceptionWhenQueryIsTooShort(String invalidQuery) {
             assertThatThrownBy(() -> searchService.findClient(invalidQuery))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(WrongQueryException.class);
         }
 
         @Test
         void shouldThrowExceptionWhenQueryExceedsMaxLength() {
             String longQuery = "a".repeat(501);
             assertThatThrownBy(() -> searchService.findClient(longQuery))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(WrongQueryException.class);
         }
     }
 

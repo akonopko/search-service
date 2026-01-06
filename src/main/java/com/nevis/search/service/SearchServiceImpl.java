@@ -3,6 +3,8 @@ package com.nevis.search.service;
 import com.nevis.search.controller.ClientSearchResponse;
 import com.nevis.search.controller.DocumentSearchResponse;
 import com.nevis.search.controller.DocumentSearchResultItem;
+import com.nevis.search.exception.EntityNotFoundException;
+import com.nevis.search.exception.WrongQueryException;
 import com.nevis.search.repository.ClientRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,18 +20,18 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class SearchServiceImpl implements SearchService {
 
-    private final ClientRepository clientRepository;
+    private final ClientService clientService;
     private final DocumentService documentService;
     private final EmbeddingService embeddingService;
 
     private static final int MIN_QUERY_LENGTH = 3;
     private static final int MAX_QUERY_LENGTH = 500;
-    private static final double MIN_SIMILARITY_THRESHOLD = 0.5;
+    private static final double MIN_SIMILARITY_THRESHOLD = 0.25;
 
     @Value("${app.search.account.limit:}")
     private Integer accountSearchLimit;
 
-    @Value("${app.search.account.similarity:}")
+    @Value("${app.search.account.similarity:0.55}")
     private Double accountSearchThreshold;
 
     @Value("${app.search.document.limit:}")
@@ -39,7 +41,7 @@ public class SearchServiceImpl implements SearchService {
     public ClientSearchResponse findClient(String query) {
         validateQuery(query);
         log.debug("Searching for clients with query: {}", query);
-        return clientRepository.search(query, Optional.ofNullable(accountSearchLimit), Optional.ofNullable(accountSearchThreshold));
+        return clientService.search(query, Optional.ofNullable(accountSearchLimit), Optional.ofNullable(accountSearchThreshold));
     }
 
     @Override
@@ -47,6 +49,8 @@ public class SearchServiceImpl implements SearchService {
         if (query == null || query.isBlank()) {
             throw new IllegalArgumentException("Query cannot be blank");
         }
+
+        clientId.ifPresent(clientService::getById);
 
         log.debug("Performing semantic search for documents. ClientId: {}, Query: {}", clientId, query);
 
@@ -70,10 +74,10 @@ public class SearchServiceImpl implements SearchService {
 
     private void validateQuery(String query) {
         if (query == null || query.trim().length() < MIN_QUERY_LENGTH) {
-            throw new IllegalArgumentException("Query too short");
+            throw new WrongQueryException("Query too short");
         }
         if (query.length() > MAX_QUERY_LENGTH) {
-            throw new IllegalArgumentException("Query too long");
+            throw new WrongQueryException("Query too long");
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.nevis.search.controller;
 
+import com.nevis.search.service.ClientService;
 import com.nevis.search.service.SearchService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,7 @@ import java.util.UUID;
 public class SearchController {
 
     private final SearchService searchService;
+    private final ClientService clientService;
 
     @GetMapping
     public ResponseEntity<GlobalSearchResponse> globalSearch(
@@ -26,6 +28,10 @@ public class SearchController {
         @RequestParam(name = "client_id", required = false) UUID clientId) {
 
         var clientResults = searchService.findClient(query);
+        if (clientId != null) {
+            clientService.getById(clientId);
+        }
+
         var documentResults = searchService.findDocument(Optional.ofNullable(clientId), query);
 
         return ResponseEntity.ok(new GlobalSearchResponse(

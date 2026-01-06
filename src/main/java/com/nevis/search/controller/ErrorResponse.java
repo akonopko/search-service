@@ -2,6 +2,6 @@ package com.nevis.search.controller;
 
 public record ErrorResponse(
     String message,
-    String errorCode,
+    int errorCode,
     long timestamp
 ) {}

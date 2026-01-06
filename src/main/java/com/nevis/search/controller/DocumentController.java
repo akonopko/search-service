@@ -1,5 +1,6 @@
 package com.nevis.search.controller;
 
+import com.nevis.search.service.ClientService;
 import com.nevis.search.service.DocumentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -14,16 +15,21 @@ import java.util.UUID;
 public class DocumentController {
 
     private final DocumentService documentService;
+    private final ClientService clientService;
 
-    @PostMapping("/clients/{id}/documents")
+    @PostMapping("/clients/{clientId}/documents")
     public ResponseEntity<DocumentResponse> createDocument(
-        @PathVariable UUID id,
+        @PathVariable UUID clientId,
         @Valid @RequestBody DocumentRequest request) {
+
+        if (clientId != null) {
+            clientService.getById(clientId);
+        }
 
         DocumentResponse response = documentService.ingestDocument(
             request.title(),
             request.content(),
-            id
+            clientId
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
