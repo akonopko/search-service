@@ -40,7 +40,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Value("${app.worker.embeddings.stale-threshold-minutes:5}")
     private int staleThresholdMinutes;
 
-    @Value("${app.document.similarity-threshold:0.65}")
+    @Value("${app.document.similarity-threshold:0.72}")
     private double documentSimilarityThreshold;
 
     public DocumentServiceImpl(
