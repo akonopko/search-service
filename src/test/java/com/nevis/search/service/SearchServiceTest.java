@@ -6,7 +6,6 @@ import com.nevis.search.controller.DocumentSearchResponse;
 import com.nevis.search.controller.DocumentSearchResultItem;
 import com.nevis.search.model.*;
 import com.nevis.search.repository.ClientRepository;
-import com.nevis.search.repository.DocumentChunkRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -35,7 +34,7 @@ class SearchServiceTest {
     private ClientRepository clientRepository;
 
     @Mock
-    private DocumentChunkRepository chunkRepository;
+    private DocumentService documentService;
 
     @Mock
     private EmbeddingService embeddingService;
@@ -90,7 +89,7 @@ class SearchServiceTest {
             DocumentSearchResultItem match = new DocumentSearchResultItem(UUID.randomUUID(), UUID.randomUUID(), "Utility Bill", 0.56, "Address info", DocumentTaskStatus.PENDING, null);
 
             when(embeddingService.embedQuery(query)).thenReturn(vector);
-            when(chunkRepository.findSimilar(eq(vector), anyInt(), any(), anyDouble()))
+            when(documentService.search(eq(vector), any(), any()))
                 .thenReturn(List.of(match));
 
             DocumentSearchResponse response = searchService.findDocument(Optional.of(clientId), query);
@@ -106,7 +105,7 @@ class SearchServiceTest {
             DocumentSearchResultItem noise = new DocumentSearchResultItem(UUID.randomUUID(), UUID.randomUUID(), "Utility Bill", 0.16, "Content", DocumentTaskStatus.PENDING, null);
 
             when(embeddingService.embedQuery(query)).thenReturn(vector);
-            when(chunkRepository.findSimilar(eq(vector), anyInt(), any(), anyDouble()))
+            when(documentService.search(eq(vector), any(), any()))
                 .thenReturn(List.of(noise));
 
             DocumentSearchResponse response = searchService.findDocument(Optional.empty(), query);
@@ -129,7 +128,7 @@ class SearchServiceTest {
 
             searchService.findDocument(Optional.of(clientId), query);
 
-            verify(chunkRepository).findSimilar(any(), anyInt(), eq(Optional.of(clientId)), anyDouble());
+            verify(documentService).search(any(), any(), eq(Optional.of(clientId)));
         }
 
         @Test
@@ -139,7 +138,7 @@ class SearchServiceTest {
 
             searchService.findDocument(Optional.empty(), query);
 
-            verify(chunkRepository).findSimilar(any(), anyInt(), eq(Optional.empty()), anyDouble());
+            verify(documentService).search(any(), any(), eq(Optional.empty()));
         }
     }
 }

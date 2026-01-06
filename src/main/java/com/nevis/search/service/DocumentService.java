@@ -13,6 +13,6 @@ import java.util.UUID;
 public interface DocumentService {
     DocumentResponse ingestDocument(String title, String content, UUID clientId);
     void saveEmbeddings(UUID docId, UUID chunkId, Map<String, float[]> embeddingMap);
-    List<DocumentSearchResultItem> search(float[] queryVector, int limit, Optional<UUID> clientId);
+    List<DocumentSearchResultItem> search(float[] queryVector, Optional<Integer> limit, Optional<UUID> clientId);
     DocumentResponse getById(UUID id);
 }

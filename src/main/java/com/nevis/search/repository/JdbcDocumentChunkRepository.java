@@ -8,6 +8,7 @@ import com.pgvector.PGvector;
 import dev.langchain4j.data.segment.TextSegment;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -22,6 +23,7 @@ import java.util.UUID;
 
 @Repository
 @RequiredArgsConstructor
+@Slf4j
 public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
 
     private final JdbcClient jdbcClient;
@@ -179,39 +181,40 @@ public class JdbcDocumentChunkRepository implements DocumentChunkRepository {
     }
 
     @Override
-    public List<DocumentSearchResultItem> findSimilar(float[] vector, int limit, Optional<UUID> clientId, double documentSimilarityThreshold) {
+    public List<DocumentSearchResultItem> findSimilar(float[] vector, Optional<Integer> limit, Optional<UUID> clientId, double threshold) {
         PGvector pgVector = new PGvector(vector);
 
-        // We use 1 - (dist) to convert distance to a similarity score (0.0 to 1.0)
-        String sql = """
-                 SELECT
-                     ce.content,
-                     d.client_id,
-                     1 - (ce.embedding <=> :vector) as score,
-                     d.title,
-                     d.summary,
-                     d.status,
-                     d.id as doc_id,
-                     d.created_at
-                 FROM document_chunk_embeddings ce
-                 JOIN documents d ON ce.document_id = d.id
-                 WHERE
-                 """ +
-                     clientId.map(x -> "d.client_id = :clientId AND ").orElse("") +
-                     """
-                       1 - (ce.embedding <=> :vector) > :threshold
-                     ORDER BY ce.embedding <=> :vector ASC
-                     LIMIT :limit
-                     """;
+        StringBuilder sql = new StringBuilder("""
+         SELECT * FROM (
+             SELECT DISTINCT ON (d.id)
+                 ce.content,
+                 d.client_id,
+                 1 - (ce.embedding <=> :vector) as score,
+                 d.title,
+                 d.summary,
+                 d.status,
+                 d.id as doc_id,
+                 d.created_at
+             FROM document_chunk_embeddings ce
+             JOIN documents d ON ce.document_id = d.id
+             WHERE 1 - (ce.embedding <=> :vector) > :threshold
+         """);
 
-        var client = jdbcClient.sql(sql)
+        if (clientId.isPresent()) {
+            sql.append(" AND d.client_id = :clientId ");
+        }
+
+        sql.append(" ORDER BY d.id, ce.embedding <=> :vector ASC) AS sub ");
+        sql.append(" ORDER BY score DESC ");
+        limit.ifPresent(l -> sql.append(" LIMIT ").append(l));
+
+        var query = jdbcClient.sql(sql.toString())
             .param("vector", pgVector)
-            .param("limit", limit)
-            .param("threshold", documentSimilarityThreshold);
+            .param("threshold", threshold);
 
-        clientId.ifPresent(uuid -> client.param("clientId", uuid));
+        clientId.ifPresent(uuid -> query.param("clientId", uuid));
 
-        return client.query((rs, rowNum) -> new DocumentSearchResultItem(
+        return query.query((rs, rowNum) -> new DocumentSearchResultItem(
             rs.getObject("doc_id", UUID.class),
             rs.getObject("client_id", UUID.class),
             rs.getString("title"),

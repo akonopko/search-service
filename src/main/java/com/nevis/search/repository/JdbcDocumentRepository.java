@@ -185,7 +185,6 @@ public class JdbcDocumentRepository implements DocumentRepository {
         String sql = """
             UPDATE documents 
             SET summary_status = 'PROCESSING'::task_status, 
-                summary_attempts = summary_attempts + 1,
                 updated_at = NOW()
             WHERE id = (
                 SELECT id FROM documents 
@@ -209,7 +208,8 @@ public class JdbcDocumentRepository implements DocumentRepository {
     public List<UUID> resetStaleAndFailedSummaries(int maxAttempts, int staleThresholdMinutes) {
         String sql = """
             UPDATE documents 
-            SET summary_status = 'PENDING'::task_status, 
+            SET summary_status = 'PENDING'::task_status,
+                summary_attempts = summary_attempts + 1, 
                 updated_at = NOW()
             WHERE (
                 summary_status = 'FAILED'::task_status 

@@ -355,7 +355,7 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
         }
 
         @Test
-        @DisplayName("Should successfully claim a PENDING document and increment attempts")
+        @DisplayName("Should successfully claim a PENDING document and not increment attempts")
         void shouldClaimPendingDocument() {
             jdbcClient.sql("""
                 INSERT INTO documents (id, client_id, title, content, summary_status, summary_attempts, status)
@@ -366,7 +366,7 @@ class JdbcDocumentRepositoryTest extends BaseIntegrationTest {
 
             assertThat(claimed).isPresent();
             assertThat(claimed.get().summaryStatus()).isEqualTo(DocumentTaskStatus.PROCESSING);
-            assertThat(claimed.get().summaryAttempts()).isEqualTo(1);
+            assertThat(claimed.get().summaryAttempts()).isEqualTo(0);
         }
 
         @Test

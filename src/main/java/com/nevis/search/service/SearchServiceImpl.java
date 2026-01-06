@@ -20,15 +20,15 @@ import java.util.UUID;
 public class SearchServiceImpl implements SearchService {
 
     private final ClientRepository clientRepository;
-    private final DocumentChunkRepository chunkRepository;
+    private final DocumentService documentService;
     private final EmbeddingService embeddingService;
 
     private static final int MIN_QUERY_LENGTH = 3;
     private static final int MAX_QUERY_LENGTH = 500;
-    private static final double MIN_SIMILARITY_THRESHOLD = 0.25;
+    private static final double MIN_SIMILARITY_THRESHOLD = 0.5;
 
-    @Value("${app.document.similarity-threshold:0.5}")
-    private double documentSimilarityThreshold;
+    @Value("${app.search.account.limit:10}")
+    private Integer accountSearchLimit;
 
     @Override
     public ClientSearchResponse findClient(String query) {
@@ -48,8 +48,8 @@ public class SearchServiceImpl implements SearchService {
         try {
             float[] queryVector = embeddingService.embedQuery(query);
 
-            List<DocumentSearchResultItem> rawResults = chunkRepository.findSimilar(
-                queryVector, 10, clientId, documentSimilarityThreshold
+            List<DocumentSearchResultItem> rawResults = documentService.search(
+                queryVector, Optional.ofNullable(accountSearchLimit), clientId
             );
 
             List<DocumentSearchResultItem> filteredResults = rawResults.stream()

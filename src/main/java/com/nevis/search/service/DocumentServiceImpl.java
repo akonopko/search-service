@@ -40,7 +40,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Value("${app.worker.embeddings.stale-threshold-minutes:5}")
     private int staleThresholdMinutes;
 
-    @Value("${app.document.similarity-threshold:0.5}")
+    @Value("${app.document.similarity-threshold:0.65}")
     private double documentSimilarityThreshold;
 
     public DocumentServiceImpl(
@@ -161,7 +161,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
-    public List<DocumentSearchResultItem> search(float[] queryVector, int limit, Optional<UUID> clientId) {
+    public List<DocumentSearchResultItem> search(float[] queryVector, Optional<Integer> limit, Optional<UUID> clientId) {
         return chunkRepository.findSimilar(queryVector, limit, clientId, documentSimilarityThreshold);
     }
 

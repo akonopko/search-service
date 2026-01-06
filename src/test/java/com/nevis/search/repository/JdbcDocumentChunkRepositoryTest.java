@@ -464,6 +464,17 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
     @Nested
     @DisplayName("Search document chunk by vector")
     class DocumentChunkVectorSearch {
+
+        private static final int VECTOR_SIZE = 768;
+        private final float[] queryVector = createVector(1.0f, 0.0f, 0.0f);
+
+        @BeforeEach
+        void setUp() {
+            jdbcClient.sql("DELETE FROM document_chunks").update();
+            jdbcClient.sql("DELETE FROM clients").update();
+            jdbcClient.sql("DELETE FROM documents").update();
+        }
+
         @Test
         @DisplayName("Should find similar chunk using vectors from resource files (E2E Vector Match)")
         void shouldFindSimilarChunkUsingRealVectors() {
@@ -494,13 +505,13 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
         }
 
         private void assertNoResult(float[] queryVector) {
-            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(queryVector, 1, Optional.empty(), 0.5);
+            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(queryVector, Optional.of(1), Optional.empty(), 0.5);
 
             assertThat(results).isEmpty();
         }
 
         private void assertQueryScore(float[] queryVector, String summary, double scoreLower, double scoreUpper) {
-            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(queryVector, 1, Optional.empty(), 0.5);
+            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(queryVector, Optional.of(1), Optional.empty(), 0.5);
 
             assertThat(results).isNotEmpty();
             DocumentSearchResultItem topResult = results.get(0);
@@ -510,6 +521,99 @@ class JdbcDocumentChunkRepositoryTest extends BaseIntegrationTest {
 
             assertThat(topResult.score()).isGreaterThanOrEqualTo(scoreLower);
             assertThat(topResult.score()).isLessThanOrEqualTo(scoreUpper);
+        }
+
+        @Test
+        @DisplayName("Should return results sorted by score DESC using 768-dim vectors")
+        void shouldReturnSortedByScore() {
+            UUID clientId = UUID.randomUUID();
+            insertTestClient(clientId);
+            UUID doc1 = insertDoc(clientId, "Perfect Match");
+            insertChunkWithEmbedding(doc1, createVector(1.0f, 0.0f, 0.0f));
+
+            UUID doc2 = insertDoc(clientId, "Middle Match");
+            insertChunkWithEmbedding(doc2, createVector(0.707f, 0.707f, 0.0f));
+
+            UUID doc3 = insertDoc(clientId, "Weak Match");
+            insertChunkWithEmbedding(doc3, createVector(0.5f, 0.5f, 0.707f));
+
+            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(
+                queryVector, Optional.of(10), Optional.empty(), 0.1
+            );
+
+            assertThat(results).hasSize(3);
+            assertThat(results.get(0).title()).isEqualTo("Perfect Match");
+            assertThat(results.get(1).title()).isEqualTo("Middle Match");
+            assertThat(results.get(2).title()).isEqualTo("Weak Match");
+
+            assertThat(results.get(0).score()).isGreaterThan(results.get(1).score());
+            assertThat(results.get(1).score()).isGreaterThan(results.get(2).score());
+        }
+
+        @Test
+        @DisplayName("Should respect the limit parameter with large vectors")
+        void shouldRespectLimit() {
+            UUID clientId = UUID.randomUUID();
+            insertTestClient(clientId);
+
+            for (int i = 1; i <= 5; i++) {
+                UUID id = insertDoc(clientId, "Doc " + i);
+                insertChunkWithEmbedding(id, queryVector);
+            }
+
+            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(
+                queryVector, Optional.of(3), Optional.empty(), 0.1
+            );
+
+            assertThat(results).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("Should return all matching results if limit is empty")
+        void shouldReturnAllWhenNoLimit() {
+            UUID clientId = UUID.randomUUID();
+            insertTestClient(clientId);
+
+            for (int i = 1; i <= 3; i++) {
+                UUID id = insertDoc(clientId, "Doc " + i);
+                insertChunkWithEmbedding(id, queryVector);
+            }
+
+            List<DocumentSearchResultItem> results = chunkRepository.findSimilar(
+                queryVector, Optional.empty(), Optional.empty(), 0.1
+            );
+
+            assertThat(results).hasSize(3);
+        }
+
+        private float[] createVector(float v1, float v2, float v3) {
+            float[] vector = new float[VECTOR_SIZE];
+            vector[0] = v1;
+            vector[1] = v2;
+            vector[2] = v3;
+            return vector;
+        }
+
+        private UUID insertDoc(UUID cId, String title) {
+            UUID id = UUID.randomUUID();
+            jdbcClient.sql("""
+                    INSERT INTO documents (id, client_id, title, content, status, summary_status, summary_attempts)
+                    VALUES (?, ?, ?, 'Content', 'READY'::task_status, 'READY'::task_status, 1)
+                    """)
+                .params(id, cId, title)
+                .update();
+            return id;
+        }
+
+        private void insertChunkWithEmbedding(UUID dId, float[] vector) {
+            UUID chunkId = UUID.randomUUID();
+            jdbcClient.sql("INSERT INTO document_chunks (id, document_id, content, status) VALUES (?, ?, 'Content', 'READY')")
+                .params(chunkId, dId)
+                .update();
+
+            jdbcClient.sql("INSERT INTO document_chunk_embeddings (document_id, chunk_id, content, embedding) VALUES (?, ?, 'Content', ?::vector)")
+                .params(dId, chunkId, java.util.Arrays.toString(vector))
+                .update();
         }
 
         private void insertTestClient(UUID id) {
